@@ -1,11 +1,11 @@
-import type { CSSProperties, DragEvent, MouseEvent } from 'react';
+import type { CSSProperties } from 'react';
 import type { Piece, Square } from '../chess/types';
 import { isLightSquare } from '../chess/board';
 import { pieceGlyph } from '../chess/pieces';
+import { useSettings } from '../settings/SettingsStore';
 
 interface SquareProps {
   square: Square;
-  index: number;
   piece: Piece | null;
   isSelected: boolean;
   isLegalTarget: boolean;
@@ -13,15 +13,15 @@ interface SquareProps {
   isLastMoveFrom: boolean;
   isLastMoveTo: boolean;
   isCheck: boolean;
-  orientation: 'w' | 'b';
   onSquareClick: (square: Square) => void;
-  onDragStart: (e: DragEvent<HTMLDivElement>, square: Square, piece: Piece) => void;
-  onDragOverSquare: (e: DragEvent<HTMLDivElement>, square: Square) => void;
-  onDropOnSquare: (e: DragEvent<HTMLDivElement>, square: Square) => void;
+  onPieceDragStart: (square: Square, piece: Piece) => void;
+  onDragOverSquare: (square: Square) => void;
+  onDropOnSquare: (square: Square) => void;
   onDragEnd: () => void;
 }
 
 export function BoardSquare(props: SquareProps) {
+  const [settings] = useSettings();
   const {
     square,
     piece,
@@ -32,7 +32,7 @@ export function BoardSquare(props: SquareProps) {
     isLastMoveTo,
     isCheck,
     onSquareClick,
-    onDragStart,
+    onPieceDragStart,
     onDragOverSquare,
     onDropOnSquare,
     onDragEnd,
@@ -40,46 +40,58 @@ export function BoardSquare(props: SquareProps) {
 
   const light = isLightSquare(square);
   const classes: string[] = ['square', light ? 'light' : 'dark'];
-  if (isSelected) classes.push('selected');
-  if (isLastMoveFrom || isLastMoveTo) classes.push('last-move');
-  if (isCheck && piece && piece.type === 'k') classes.push('in-check');
-  if (isLegalTarget) classes.push('legal-target');
-  if (isCaptureTarget) classes.push('legal-capture');
+  if (settings.highlightLastMove && (isLastMoveFrom || isLastMoveTo)) classes.push('last-move');
+  if (settings.highlightCheck && isCheck && piece && piece.type === 'k') classes.push('in-check');
 
-  const style: CSSProperties = { position: 'relative' };
+  const pieceClasses: string[] = ['piece', `piece-${piece?.color ?? 'w'}`];
+  if (isSelected) pieceClasses.push('selected');
 
-  const handleDragStart = (e: DragEvent<HTMLDivElement>) => {
-    if (!piece) {
-      e.preventDefault();
-      return;
-    }
-    onDragStart(e, square, piece);
-  };
+  const showLegalHint = settings.showLegalMoves && (isLegalTarget || isCaptureTarget);
 
-  const handleClick = (_e: MouseEvent<HTMLDivElement>) => {
-    onSquareClick(square);
-  };
+  const pieceStyle: CSSProperties = piece
+    ? { color: piece.color === 'w' ? settings.pieceColorW : settings.pieceColorB }
+    : {};
 
   return (
     <div
       className={classes.join(' ')}
-      style={style}
       data-square={square}
-      onClick={handleClick}
-      onDragOver={(e) => onDragOverSquare(e, square)}
-      onDrop={(e) => onDropOnSquare(e, square)}
+      onClick={() => onSquareClick(square)}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        onDragOverSquare(square);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDropOnSquare(square);
+      }}
     >
       {piece && (
         <div
-          className={`piece piece-${piece.color}`}
+          className={pieceClasses.join(' ')}
+          style={pieceStyle}
           draggable
-          onDragStart={handleDragStart}
+          onDragStart={(e) => {
+            if (!piece) {
+              e.preventDefault();
+              return;
+            }
+            e.dataTransfer.setData('text/plain', square);
+            e.dataTransfer.effectAllowed = 'move';
+            onPieceDragStart(square, piece);
+          }}
           onDragEnd={onDragEnd}
         >
-          {pieceGlyph(piece.color, piece.type)}
+          {pieceGlyph(settings.pieceSet, piece.color, piece.type)}
         </div>
       )}
-      {isLegalTarget && !isCaptureTarget && <div className="legal-dot" />}
+      {showLegalHint && (
+        <div
+          className={`legal-hint ${isCaptureTarget ? 'capture' : 'quiet'}`}
+          style={isCaptureTarget ? { color: light ? 'rgba(0,0,0,0.30)' : 'rgba(255,255,255,0.40)' } : {}}
+        />
+      )}
     </div>
   );
 }

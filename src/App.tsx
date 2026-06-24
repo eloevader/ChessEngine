@@ -1,16 +1,28 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { DragEvent } from 'react';
 import { Board } from './components/Board';
 import { MoveHistory } from './components/MoveHistory';
 import { PromotionDialog } from './components/PromotionDialog';
+import { SettingsPanel } from './components/SettingsPanel';
 import { GameState, type LegalMove } from './chess/GameState';
 import type { Piece, Square } from './chess/types';
+import { useSettings, ANIMATION_DURATIONS_MS } from './settings/SettingsStore';
+import { useSound } from './settings/SoundManager';
+import { getTheme } from './chess/themes';
+import { themeToCss } from './chess/themes';
 import './App.css';
 
 type PendingPromotion = {
   from: Square;
   to: Square;
   color: 'w' | 'b';
+} | null;
+
+type AnimatingMove = {
+  from: Square;
+  to: Square;
+  piece: Piece;
+  isCapture: boolean;
+  captured: Piece | null;
 } | null;
 
 const game = new GameState();
@@ -50,17 +62,17 @@ function findKingSquare(fen: string, color: 'w' | 'b'): Square | null {
 }
 
 function App() {
+  const [settings] = useSettings();
+  const { emit } = useSound();
   const [fen, setFen] = useState(game.fen());
-  const [, setVersion] = useState(0);
   const [selected, setSelected] = useState<Square | null>(null);
   const [legalTargets, setLegalTargets] = useState<Set<Square>>(new Set());
   const [captureTargets, setCaptureTargets] = useState<Set<Square>>(new Set());
   const [lastMove, setLastMove] = useState<{ from: Square; to: Square } | null>(null);
   const [orientation, setOrientation] = useState<'w' | 'b'>('w');
   const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion>(null);
-  const [dragFrom, setDragFrom] = useState<Square | null>(null);
-
-  const refresh = useCallback(() => setVersion((v) => v + 1), []);
+  const [animatingMove, setAnimatingMove] = useState<AnimatingMove>(null);
+  const [settingsOpen, setSettingsOpen] = useState(settings.showSettingsOnStart);
 
   const snapshot = game.snapshot();
   const board = useMemo(() => buildBoard(fen), [fen]);
@@ -73,9 +85,61 @@ function App() {
     return snapshot.history.map((san) => ({ san } as LegalMove));
   }, [snapshot.history]);
 
+  const theme = getTheme(settings.boardThemeId);
+  const effectiveLight = settings.customLight ?? theme.light;
+  const effectiveDark = settings.customDark ?? theme.dark;
+
+  useEffect(() => {
+    const css = themeToCss(theme);
+    css['--light-sq'] = effectiveLight;
+    css['--dark-sq'] = effectiveDark;
+    const root = document.documentElement;
+    for (const [k, v] of Object.entries(css)) {
+      root.style.setProperty(k, v);
+    }
+  }, [theme, effectiveLight, effectiveDark]);
+
+  const tryMove = useCallback(
+    (from: Square, to: Square, promotion?: 'q' | 'r' | 'b' | 'n') => {
+      const piece = game.pieceAt(from);
+      const target = game.pieceAt(to);
+      const captured = target;
+      if (!piece) return null;
+      const result = game.move(from, to, promotion);
+      if (!result) {
+        emit({ type: 'illegal' });
+        return null;
+      }
+      const anim: AnimatingMove = {
+        from: result.from as Square,
+        to: result.to as Square,
+        piece,
+        isCapture: result.isCapture,
+        captured,
+      };
+      setLastMove({ from: result.from as Square, to: result.to as Square });
+      setAnimatingMove(anim);
+      setFen(game.fen());
+
+      if (result.isCapture) emit({ type: 'capture', move: result });
+      else emit({ type: 'move', move: result });
+
+      const nextSnap = game.snapshot();
+      if (nextSnap.isCheckmate) emit({ type: 'checkmate' });
+      else if (nextSnap.isStalemate || nextSnap.isDraw) emit({ type: 'draw' });
+      else if (nextSnap.inCheck) emit({ type: 'check' });
+
+      if (settings.flipAfterMove) {
+        setTimeout(() => setOrientation((o) => (o === 'w' ? 'b' : 'w')), ANIMATION_DURATIONS_MS[settings.animationSpeed]);
+      }
+      return result;
+    },
+    [emit, settings.flipAfterMove, settings.animationSpeed],
+  );
+
   const handleSquareClick = useCallback(
     (square: Square) => {
-      if (pendingPromotion) return;
+      if (pendingPromotion || animatingMove) return;
       if (snapshot.isGameOver) return;
 
       const piece = game.pieceAt(square);
@@ -110,12 +174,7 @@ function App() {
           setPendingPromotion({ from: selected, to: square, color: fromPiece!.color });
           return;
         }
-        const result = game.move(selected, square);
-        if (result) {
-          setLastMove({ from: result.from as Square, to: result.to as Square });
-          setFen(game.fen());
-          refresh();
-        }
+        tryMove(selected, square);
         setSelected(null);
         setLegalTargets(new Set());
         setCaptureTargets(new Set());
@@ -140,22 +199,14 @@ function App() {
       setLegalTargets(new Set());
       setCaptureTargets(new Set());
     },
-    [selected, legalTargets, captureTargets, snapshot.isGameOver, pendingPromotion, refresh],
+    [selected, legalTargets, captureTargets, snapshot.isGameOver, pendingPromotion, animatingMove, tryMove],
   );
 
-  const handleDragStart = useCallback(
-    (e: DragEvent<HTMLDivElement>, from: Square, piece: Piece) => {
-      if (snapshot.isGameOver) {
-        e.preventDefault();
-        return;
-      }
-      if (piece.color !== game.turn()) {
-        e.preventDefault();
-        return;
-      }
-      e.dataTransfer.setData('text/plain', from);
-      e.dataTransfer.effectAllowed = 'move';
-      setDragFrom(from);
+  const handlePieceDragStart = useCallback(
+    (from: Square, piece: Piece) => {
+      if (animatingMove) return;
+      if (snapshot.isGameOver) return;
+      if (piece.color !== game.turn()) return;
       setSelected(from);
       const moves = game.legalMovesFrom(from);
       const targets = new Set<Square>();
@@ -167,47 +218,35 @@ function App() {
       setLegalTargets(targets);
       setCaptureTargets(captures);
     },
-    [snapshot.isGameOver],
+    [snapshot.isGameOver, animatingMove],
   );
 
-  const handleDragOverSquare = useCallback((e: DragEvent<HTMLDivElement>, _square: Square) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  }, []);
-
   const handleDropOnSquare = useCallback(
-    (e: DragEvent<HTMLDivElement>, to: Square) => {
-      e.preventDefault();
-      const from = (e.dataTransfer.getData('text/plain') || dragFrom) as Square | null;
-      setDragFrom(null);
-      if (!from || from === to) {
+    (to: Square) => {
+      if (animatingMove) return;
+      if (!selected) return;
+      if (!legalTargets.has(to) && !captureTargets.has(to)) {
         setSelected(null);
         setLegalTargets(new Set());
         setCaptureTargets(new Set());
         return;
       }
-      const fromPiece = game.pieceAt(from);
+      const fromPiece = game.pieceAt(selected);
       if (!fromPiece) return;
       const isPromotion = fromPiece.type === 'p' && (to[1] === '1' || to[1] === '8');
       if (isPromotion) {
-        setPendingPromotion({ from, to, color: fromPiece.color });
+        setPendingPromotion({ from: selected, to, color: fromPiece.color });
         return;
       }
-      const result = game.move(from, to);
-      if (result) {
-        setLastMove({ from: result.from as Square, to: result.to as Square });
-        setFen(game.fen());
-        refresh();
-      }
+      tryMove(selected, to);
       setSelected(null);
       setLegalTargets(new Set());
       setCaptureTargets(new Set());
     },
-    [dragFrom, refresh],
+    [selected, legalTargets, captureTargets, animatingMove, tryMove],
   );
 
   const handleDragEnd = useCallback(() => {
-    setDragFrom(null);
     setSelected(null);
     setLegalTargets(new Set());
     setCaptureTargets(new Set());
@@ -215,12 +254,7 @@ function App() {
 
   const onChoosePromotion = (piece: 'q' | 'r' | 'b' | 'n') => {
     if (!pendingPromotion) return;
-    const result = game.move(pendingPromotion.from, pendingPromotion.to, piece);
-    if (result) {
-      setLastMove({ from: result.from as Square, to: result.to as Square });
-      setFen(game.fen());
-      refresh();
-    }
+    tryMove(pendingPromotion.from, pendingPromotion.to, piece);
     setPendingPromotion(null);
     setSelected(null);
     setLegalTargets(new Set());
@@ -236,21 +270,22 @@ function App() {
     setLegalTargets(new Set());
     setCaptureTargets(new Set());
     setLastMove(null);
-    refresh();
+    setAnimatingMove(null);
   };
 
   const onUndo = () => {
+    if (animatingMove) return;
     const result = game.undo();
     if (result) {
       setFen(game.fen());
       setLastMove(null);
-      refresh();
     }
   };
 
   const onFlip = () => setOrientation((o) => (o === 'w' ? 'b' : 'w'));
 
   const onJumpTo = (ply: number) => {
+    if (animatingMove) return;
     game.reset();
     for (let i = 0; i <= ply && i < snapshot.history.length; i++) {
       game.moveSan(snapshot.history[i]);
@@ -258,7 +293,6 @@ function App() {
     setFen(game.fen());
     setLastMove(null);
     setSelected(null);
-    refresh();
   };
 
   useEffect(() => {
@@ -300,18 +334,23 @@ function App() {
             captureTargets={captureTargets}
             lastMove={lastMove}
             kingInCheck={kingInCheck}
+            animatingMove={animatingMove}
             onSquareClick={handleSquareClick}
-            onDragStart={handleDragStart}
-            onDragOverSquare={handleDragOverSquare}
+            onPieceDragStart={handlePieceDragStart}
+            onDragOverSquare={() => {}}
             onDropOnSquare={handleDropOnSquare}
             onDragEnd={handleDragEnd}
+            onAnimationDone={() => setAnimatingMove(null)}
           />
           <div className="controls">
             <button onClick={onReset}>New Game</button>
-            <button onClick={onUndo} disabled={snapshot.history.length === 0}>
+            <button onClick={onUndo} disabled={snapshot.history.length === 0 || animatingMove !== null}>
               Undo
             </button>
             <button onClick={onFlip}>Flip</button>
+            <button onClick={() => setSettingsOpen(true)} aria-label="Open settings">
+              Settings
+            </button>
           </div>
         </div>
         <aside className="side-panel">
@@ -328,6 +367,7 @@ function App() {
           <div className="hint">
             <p>Click a piece, then a highlighted square. Drag &amp; drop also works.</p>
             <p>Castling, en passant, and promotion are all supported.</p>
+            <p>Tap <strong>Settings</strong> to change board, pieces, sound, animation.</p>
           </div>
         </aside>
       </main>
@@ -338,6 +378,7 @@ function App() {
           onCancel={onCancelPromotion}
         />
       )}
+      <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }
