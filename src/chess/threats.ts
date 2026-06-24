@@ -50,43 +50,39 @@ function squareAt(fileIdx: number, rankIdx: number): Square {
 
 /** Computes attack arrows for the current position.
  *  Each arrow goes from an attacking piece to the square it threatens.
- *  - `attackers` are restricted to the piece color passed in (so we draw only
- *    white threats or only black threats at a time). */
-export function useThreats(fen: string, showThreats: boolean): Threat[] {
+ *  Restricts to the side that's about to move so the board isn't flooded
+ *  with hundreds of arrows. */
+export function useThreats(
+  fen: string,
+  showThreats: boolean,
+  attackerFilter: 'w' | 'b' = 'b',
+): Threat[] {
   return useMemo(() => {
     if (!showThreats) return [];
     const game = new GameState(fen);
     const board = (game as any).chess.board() as Array<Array<{ type: string; color: 'w' | 'b' } | null>>;
-    // board is 8x8, board[0] is rank 8, board[7] is rank 1
     const threats: Threat[] = [];
 
-    // For each piece on the board, compute the squares it attacks
     for (let r = 0; r < 8; r++) {
       for (let c = 0; c < 8; c++) {
         const piece = board[r][c];
-        if (!piece) continue;
-        const type = piece.type;
-        const color = piece.color;
-        const fromFile = c;
-        const fromRank = r;
-        const fromSquare = squareAt(fromFile, fromRank);
+        if (!piece || piece.color !== attackerFilter) continue;
+        const fromSquare = squareAt(c, r);
 
-        const moves = PIECE_ATTACKS[type] ?? [];
+        const moves = PIECE_ATTACKS[piece.type] ?? [];
         for (const [df, dr] of moves) {
-          if (!SLIDING.has(type)) {
-            const tf = fromFile + df;
-            const tr = fromRank + dr;
+          if (!SLIDING.has(piece.type)) {
+            const tf = c + df;
+            const tr = r + dr;
             if (!inBounds(tf, tr)) continue;
-            threats.push({ from: fromSquare, to: squareAt(tf, tr), attacker: color });
+            threats.push({ from: fromSquare, to: squareAt(tf, tr), attacker: piece.color });
             continue;
           }
-          // Sliding: walk in the direction until out of bounds or blocked
-          let tf = fromFile + df;
-          let tr = fromRank + dr;
+          let tf = c + df;
+          let tr = r + dr;
           while (inBounds(tf, tr)) {
-            const target = board[tr][tf];
-            threats.push({ from: fromSquare, to: squareAt(tf, tr), attacker: color });
-            if (target) break; // blocked
+            threats.push({ from: fromSquare, to: squareAt(tf, tr), attacker: piece.color });
+            if (board[tr][tf]) break;
             tf += df;
             tr += dr;
           }
@@ -94,5 +90,5 @@ export function useThreats(fen: string, showThreats: boolean): Threat[] {
       }
     }
     return threats;
-  }, [fen, showThreats]);
+  }, [fen, showThreats, attackerFilter]);
 }

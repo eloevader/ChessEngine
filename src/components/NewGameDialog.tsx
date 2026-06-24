@@ -82,7 +82,7 @@ export function NewGameDialog({ open, onStart, onCancel }: NewGameDialogProps) {
         <div className="ng-body">
           <section className="ng-section">
             <h3>Mode</h3>
-            <div className="ng-seg">
+            <div className="ng-seg three">
               <button
                 className={`ng-seg-btn ${draft.gameMode === 'local' ? 'selected' : ''}`}
                 onClick={() => updateDraft({ gameMode: 'local' })}
@@ -96,6 +96,13 @@ export function NewGameDialog({ open, onStart, onCancel }: NewGameDialogProps) {
               >
                 <span className="ng-seg-label">vs Computer</span>
                 <span className="ng-seg-hint">Stockfish engine</span>
+              </button>
+              <button
+                className={`ng-seg-btn ${draft.gameMode === 'analysis' ? 'selected' : ''}`}
+                onClick={() => updateDraft({ gameMode: 'analysis' })}
+              >
+                <span className="ng-seg-label">Analysis</span>
+                <span className="ng-seg-hint">No clock, no opponent</span>
               </button>
             </div>
           </section>

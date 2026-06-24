@@ -1,5 +1,5 @@
 import { useSettingsDraft } from '../settings/SettingsStore';
-import type { AnimationSpeed, AnimationStyle, SoundPack, CoordDisplay, PlayerSide, GameMode, EvalBarPosition } from '../settings/SettingsStore';
+import type { AnimationSpeed, AnimationStyle, SoundPack, CoordDisplay, EvalBarPosition } from '../settings/SettingsStore';
 import { BOARD_THEMES, getTheme } from '../chess/themes';
 import { PIECE_SETS, pieceImageUrl, type PieceSetId } from '../chess/pieces';
 
@@ -29,23 +29,6 @@ const COORD_MODES: { id: CoordDisplay; label: string; description: string }[] = 
   { id: 'outside', label: 'Outside', description: 'Labels on rank/file edges' },
   { id: 'inside', label: 'Inside', description: 'Labels inside the edge cells' },
   { id: 'all', label: 'All', description: 'Every cell shows its square' },
-];
-
-const ENGINE_LEVELS: { id: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8; label: string; hint: string }[] = [
-  { id: 1, label: '1', hint: '~400 · Beginner' },
-  { id: 2, label: '2', hint: '~800 · Easy' },
-  { id: 3, label: '3', hint: '~1100 · Casual' },
-  { id: 4, label: '4', hint: '~1400 · Intermediate' },
-  { id: 5, label: '5', hint: '~1700 · Club' },
-  { id: 6, label: '6', hint: '~2000 · Strong' },
-  { id: 7, label: '7', hint: '~2200 · Expert' },
-  { id: 8, label: '8', hint: '~2400+ · Master' },
-];
-
-const PLAYER_SIDES: { id: PlayerSide; label: string }[] = [
-  { id: 'w', label: 'White' },
-  { id: 'b', label: 'Black' },
-  { id: 'random', label: 'Random' },
 ];
 
 const EVAL_POSITIONS: { id: EvalBarPosition; label: string }[] = [
@@ -81,58 +64,6 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
         </div>
 
         <div className="settings-body">
-          <section className="settings-section">
-            <h3>Game Mode</h3>
-            <div className="setting-row">
-              <label>Mode</label>
-              <div className="seg-group">
-                {(['local', 'computer'] as GameMode[]).map((m) => (
-                  <button
-                    key={m}
-                    className={`seg ${draft.gameMode === m ? 'selected' : ''}`}
-                    onClick={() => updateDraft({ gameMode: m })}
-                  >
-                    {m === 'local' ? '2 Players' : 'vs Computer'}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {draft.gameMode === 'computer' && (
-              <>
-                <div className="setting-row">
-                  <label>Engine Level</label>
-                  <div className="level-row">
-                    {ENGINE_LEVELS.map((l) => (
-                      <button
-                        key={l.id}
-                        className={`level-btn ${draft.engineLevel === l.id ? 'selected' : ''}`}
-                        onClick={() => updateDraft({ engineLevel: l.id })}
-                        title={l.hint}
-                      >
-                        {l.label}
-                      </button>
-                    ))}
-                  </div>
-                  <span className="setting-value">{ENGINE_LEVELS[draft.engineLevel - 1].hint}</span>
-                </div>
-                <div className="setting-row">
-                  <label>Play as</label>
-                  <div className="seg-group">
-                    {PLAYER_SIDES.map((s) => (
-                      <button
-                        key={s.id}
-                        className={`seg ${draft.playerSide === s.id ? 'selected' : ''}`}
-                        onClick={() => updateDraft({ playerSide: s.id })}
-                      >
-                        {s.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-          </section>
-
           <section className="settings-section">
             <h3>Board</h3>
             <div className="setting-row">

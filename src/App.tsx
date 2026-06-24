@@ -9,14 +9,24 @@ import { ClockDisplay } from './components/ClockDisplay';
 import { NewGameDialog } from './components/NewGameDialog';
 import { GameState, type LegalMove } from './chess/GameState';
 import type { Piece, Square } from './chess/types';
-import { useSettings, ANIMATION_DURATIONS_MS, setCommittedSettings } from './settings/SettingsStore';
+import {
+  useSettings,
+  ANIMATION_DURATIONS_MS,
+  setCommittedSettings,
+} from './settings/SettingsStore';
+import type {
+  GameMode,
+  PlayerSide,
+  EngineLevel,
+} from './settings/SettingsStore';
 import { useSound } from './settings/SoundManager';
 import { getTheme, themeToCss } from './chess/themes';
 import { useEngine } from './engine/useEngine';
 import { useChessClock } from './chess/ChessClock';
 import { useThreats } from './chess/threats';
-import type { GameMode, PlayerSide, EngineLevel } from './settings/SettingsStore';
 import './App.css';
+
+// ---------------- Types ----------------
 
 type PendingPromotion = {
   from: Square;
@@ -40,6 +50,13 @@ interface GameConfig {
   timeSec: number;
   increment: number;
 }
+
+type GameEndReason =
+  | { kind: 'resign'; side: 'w' | 'b' }
+  | { kind: 'draw' }
+  | null;
+
+// ---------------- Pure helpers ----------------
 
 const game = new GameState();
 const INITIAL_FEN = game.fen();
@@ -78,14 +95,26 @@ function findKingSquare(fen: string, color: 'w' | 'b'): Square | null {
   return null;
 }
 
+function isPlayMode(mode: GameMode): boolean {
+  return mode === 'local' || mode === 'computer';
+}
+
+function pickEngineSide(playerSide: PlayerSide): 'w' | 'b' {
+  if (playerSide === 'w') return 'b';
+  if (playerSide === 'b') return 'w';
+  return Math.random() < 0.5 ? 'w' : 'b';
+}
+
+// ---------------- App ----------------
+
 function App() {
   const settings = useSettings();
   const { emit } = useSound();
   const engine = useEngine();
   const clock = useChessClock();
 
+  // -------- Local UI state --------
   const [fen, setFen] = useState(game.fen());
-  const threats = useThreats(fen, settings.showThreats);
   const [selected, setSelected] = useState<Square | null>(null);
   const [legalTargets, setLegalTargets] = useState<Set<Square>>(new Set());
   const [captureTargets, setCaptureTargets] = useState<Set<Square>>(new Set());
@@ -95,66 +124,54 @@ function App() {
   const [animatingMove, setAnimatingMove] = useState<AnimatingMove>(null);
   const [settingsOpen, setSettingsOpen] = useState(settings.showSettingsOnStart);
   const [newGameOpen, setNewGameOpen] = useState(false);
-  const [captures, setCaptures] = useState<{ white: Piece[]; black: Piece[] }>({ white: [], black: [] });
-  /** Ply at which we are currently viewing (default = end of game). */
-  const [viewPly, setViewPly] = useState<number>(0);
-  /** Full move list (preserved when navigating so future moves aren't lost). */
+  const [captures, setCaptures] = useState<{ white: Piece[]; black: Piece[] }>({
+    white: [],
+    black: [],
+  });
+  const [viewPly, setViewPly] = useState(0);
   const [fullHistory, setFullHistory] = useState<string[]>([]);
-  /** Side chosen for computer opponent (resolved at game start if 'random'). */
   const [engineSide, setEngineSide] = useState<'w' | 'b' | null>(null);
-  /** Whether the game has a clock (and which side is the human in computer mode). */
   const [clockEnabled, setClockEnabled] = useState(false);
+  const [gameEndReason, setGameEndReason] = useState<GameEndReason>(null);
+  const [drawOffer, setDrawOffer] = useState<'w' | 'b' | null>(null);
+  /** True after the user clicks "Review" on the post-game prompt. */
+  const [reviewing, setReviewing] = useState(false);
 
+  // -------- Derived state --------
+  // Show threats for the side that's about to move (the side that can attack)
+  const threats = useThreats(fen, settings.showThreats, game.turn());
   const snapshot = game.snapshot();
   const board = useMemo(() => buildBoard(fen), [fen]);
-  const kingInCheck = useMemo(() => {
-    if (!snapshot.inCheck) return null;
-    return findKingSquare(fen, snapshot.turn);
-  }, [fen, snapshot.inCheck, snapshot.turn]);
+  const kingInCheck = useMemo(
+    () => (snapshot.inCheck ? findKingSquare(fen, snapshot.turn) : null),
+    [fen, snapshot.inCheck, snapshot.turn],
+  );
 
-  const sanMoves = useMemo<LegalMove[]>(() => {
-    return fullHistory.map((san) => ({ san } as LegalMove));
-  }, [fullHistory]);
-
+  // -------- Theme --------
   const theme = getTheme(settings.boardThemeId);
   const effectiveLight = settings.customLight ?? theme.light;
   const effectiveDark = settings.customDark ?? theme.dark;
-
   useEffect(() => {
     const css = themeToCss(theme);
     css['--light-sq'] = effectiveLight;
     css['--dark-sq'] = effectiveDark;
     const root = document.documentElement;
-    for (const [k, v] of Object.entries(css)) {
-      root.style.setProperty(k, v);
-    }
+    for (const [k, v] of Object.entries(css)) root.style.setProperty(k, v);
   }, [theme, effectiveLight, effectiveDark]);
 
-  // Pick engine side at game start (handles 'random')
-  useEffect(() => {
-    if (settings.gameMode === 'computer' && engineSide === null) {
-      const side =
-        settings.playerSide === 'random'
-          ? Math.random() < 0.5
-            ? 'w'
-            : 'b'
-          : settings.playerSide === 'w'
-            ? 'b'
-            : 'w';
-      setEngineSide(side);
-    }
-  }, [settings.gameMode, settings.playerSide, engineSide]);
-
+  // -------- Move execution --------
   const tryMove = useCallback(
     (from: Square, to: Square, promotion?: 'q' | 'r' | 'b' | 'n') => {
       const piece = game.pieceAt(from);
-      const captured = game.pieceAt(to);
       if (!piece) return null;
       const result = game.move(from, to, promotion);
       if (!result) {
         emit({ type: 'illegal' });
         return null;
       }
+      const captured = result.captured
+        ? ({ color: result.color === 'w' ? 'b' : 'w', type: result.captured } as Piece)
+        : null;
       const anim: AnimatingMove = {
         from: result.from as Square,
         to: result.to as Square,
@@ -168,21 +185,15 @@ function App() {
       setViewPly((v) => v + 1);
       setFullHistory((h) => [...h, result.san]);
 
-      // Clock: add increment to the side that just moved, then switch to opponent
       if (clockEnabled) {
         clock.addIncrement(result.color);
-        const next = game.turn();
-        clock.switchTo(next);
+        clock.switchTo(game.turn());
       }
 
-      if (result.captured) {
-        const capturedPiece: Piece = {
-          color: result.color === 'w' ? 'b' : 'w',
-          type: result.captured as Piece['type'],
-        };
+      if (captured) {
         setCaptures((prev) => {
-          const key = capturedPiece.color === 'w' ? 'white' : 'black';
-          return { ...prev, [key]: [...prev[key], capturedPiece] };
+          const key = captured.color === 'w' ? 'white' : 'black';
+          return { ...prev, [key]: [...prev[key], captured] };
         });
       }
 
@@ -202,97 +213,101 @@ function App() {
       }
       return result;
     },
-    [emit, settings.flipAfterMove, settings.animationSpeed, clock, clockEnabled],
+    [clock, clockEnabled, emit, settings.animationSpeed, settings.flipAfterMove],
   );
+
+  // -------- Click handling --------
+  const canHumanMove = (): boolean => {
+    if (pendingPromotion || animatingMove) return false;
+    if (snapshot.isGameOver || gameEndReason) return false;
+    if (settings.gameMode === 'analysis') return true; // free play in analysis
+    if (
+      settings.gameMode === 'computer' &&
+      engineSide !== null &&
+      game.turn() === engineSide
+    ) {
+      return false;
+    }
+    return true;
+  };
 
   const handleSquareClick = useCallback(
     (square: Square) => {
-      if (pendingPromotion || animatingMove) return;
-      if (snapshot.isGameOver) return;
-
-      // Block human moves if it's the engine's turn in computer mode
-      if (settings.gameMode === 'computer' && engineSide !== null && game.turn() === engineSide) {
-        return;
-      }
-
+      if (!canHumanMove()) return;
       const piece = game.pieceAt(square);
 
       if (selected === null) {
-        if (piece && piece.color === game.turn()) {
-          setSelected(square);
-          const moves = game.legalMovesFrom(square);
-          const targets = new Set<Square>();
-          const captures = new Set<Square>();
-          for (const m of moves) {
-            if (m.isCapture) captures.add(m.to as Square);
-            else targets.add(m.to as Square);
-          }
-          setLegalTargets(targets);
-          setCaptureTargets(captures);
-        }
+        if (piece && piece.color === game.turn()) selectSquare(square);
         return;
       }
 
       if (square === selected) {
-        setSelected(null);
-        setLegalTargets(new Set());
-        setCaptureTargets(new Set());
+        clearSelection();
         return;
       }
 
       if (legalTargets.has(square) || captureTargets.has(square)) {
         const fromPiece = game.pieceAt(selected);
-        const isPromotion = fromPiece?.type === 'p' && (square[1] === '1' || square[1] === '8');
+        const isPromotion =
+          fromPiece?.type === 'p' && (square[1] === '1' || square[1] === '8');
         if (isPromotion) {
           setPendingPromotion({ from: selected, to: square, color: fromPiece!.color });
           return;
         }
         tryMove(selected, square);
-        setSelected(null);
-        setLegalTargets(new Set());
-        setCaptureTargets(new Set());
+        clearSelection();
         return;
       }
 
+      // Switch to a different piece
       if (piece && piece.color === game.turn()) {
-        setSelected(square);
-        const moves = game.legalMovesFrom(square);
-        const targets = new Set<Square>();
-        const captures = new Set<Square>();
-        for (const m of moves) {
-          if (m.isCapture) captures.add(m.to as Square);
-          else targets.add(m.to as Square);
-        }
-        setLegalTargets(targets);
-        setCaptureTargets(captures);
+        selectSquare(square);
         return;
       }
-
-      setSelected(null);
-      setLegalTargets(new Set());
-      setCaptureTargets(new Set());
+      clearSelection();
     },
-    [selected, legalTargets, captureTargets, snapshot.isGameOver, pendingPromotion, animatingMove, tryMove, settings.gameMode, engineSide],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      selected,
+      legalTargets,
+      captureTargets,
+      snapshot.isGameOver,
+      gameEndReason,
+      pendingPromotion,
+      animatingMove,
+      tryMove,
+      settings.gameMode,
+      engineSide,
+    ],
   );
+
+  function selectSquare(square: Square) {
+    setSelected(square);
+    const moves = game.legalMovesFrom(square);
+    const targets = new Set<Square>();
+    const captures = new Set<Square>();
+    for (const m of moves) {
+      if (m.isCapture) captures.add(m.to as Square);
+      else targets.add(m.to as Square);
+    }
+    setLegalTargets(targets);
+    setCaptureTargets(captures);
+  }
+
+  function clearSelection() {
+    setSelected(null);
+    setLegalTargets(new Set());
+    setCaptureTargets(new Set());
+  }
 
   const handlePieceDragStart = useCallback(
     (from: Square, piece: Piece) => {
-      if (animatingMove) return;
-      if (snapshot.isGameOver) return;
+      if (!canHumanMove()) return;
       if (piece.color !== game.turn()) return;
-      if (settings.gameMode === 'computer' && engineSide !== null && game.turn() === engineSide) return;
-      setSelected(from);
-      const moves = game.legalMovesFrom(from);
-      const targets = new Set<Square>();
-      const captures = new Set<Square>();
-      for (const m of moves) {
-        if (m.isCapture) captures.add(m.to as Square);
-        else targets.add(m.to as Square);
-      }
-      setLegalTargets(targets);
-      setCaptureTargets(captures);
+      selectSquare(from);
     },
-    [snapshot.isGameOver, animatingMove, settings.gameMode, engineSide],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [snapshot.isGameOver, gameEndReason, animatingMove, settings.gameMode, engineSide],
   );
 
   const handleDropOnSquare = useCallback(
@@ -300,9 +315,7 @@ function App() {
       if (animatingMove) return;
       if (!selected) return;
       if (!legalTargets.has(to) && !captureTargets.has(to)) {
-        setSelected(null);
-        setLegalTargets(new Set());
-        setCaptureTargets(new Set());
+        clearSelection();
         return;
       }
       const fromPiece = game.pieceAt(selected);
@@ -313,31 +326,24 @@ function App() {
         return;
       }
       tryMove(selected, to);
-      setSelected(null);
-      setLegalTargets(new Set());
-      setCaptureTargets(new Set());
+      clearSelection();
     },
     [selected, legalTargets, captureTargets, animatingMove, tryMove],
   );
 
-  const handleDragEnd = useCallback(() => {
-    setSelected(null);
-    setLegalTargets(new Set());
-    setCaptureTargets(new Set());
-  }, []);
+  const handleDragEnd = useCallback(() => clearSelection(), []);
 
+  // -------- Promotion --------
   const onChoosePromotion = (piece: 'q' | 'r' | 'b' | 'n') => {
     if (!pendingPromotion) return;
     tryMove(pendingPromotion.from, pendingPromotion.to, piece);
     setPendingPromotion(null);
-    setSelected(null);
-    setLegalTargets(new Set());
-    setCaptureTargets(new Set());
+    clearSelection();
   };
-
   const onCancelPromotion = () => setPendingPromotion(null);
 
-  const _onReset = () => {
+  // -------- Game lifecycle --------
+  const resetGame = () => {
     game.reset();
     setFen(game.fen());
     setSelected(null);
@@ -355,88 +361,37 @@ function App() {
     setClockEnabled(false);
     setGameEndReason(null);
     setDrawOffer(null);
-  };
-  void _onReset;
-
-  /** Manually-set end-of-game reason (resign / draw agreement). null means no
-   *  manual end; falls back to chess.js status. */
-  const [gameEndReason, setGameEndReason] = useState<
-    | { kind: 'resign'; side: 'w' | 'b' }
-    | { kind: 'draw' }
-    | null
-  >(null);
-  /** In 2-player mode, true if a draw has been offered by the current player. */
-  const [drawOffer, setDrawOffer] = useState<'w' | 'b' | null>(null);
-
-  const onOfferDraw = () => {
-    if (snapshot.isGameOver || gameEndReason) return;
-    if (settings.gameMode === 'computer' && engineSide !== null) {
-      // In computer mode, automatically decline (we don't have a real engine accept)
-      emit({ type: 'illegal' });
-      return;
-    }
-    setDrawOffer(game.turn());
-  };
-  const onAcceptDraw = () => {
-    setDrawOffer(null);
-    setGameEndReason({ kind: 'draw' });
-  };
-  const onDeclineDraw = () => setDrawOffer(null);
-
-  const onResign = () => {
-    if (snapshot.isGameOver || gameEndReason) return;
-    if (settings.gameMode === 'computer' && engineSide !== null) {
-      // Human side resigns
-      const human: 'w' | 'b' = engineSide === 'w' ? 'b' : 'w';
-      setGameEndReason({ kind: 'resign', side: human });
-    } else {
-      // Local mode: the side that's about to move resigns
-      setGameEndReason({ kind: 'resign', side: game.turn() });
-    }
+    setReviewing(false);
   };
 
   const onStartNewGame = (config: GameConfig) => {
-    game.reset();
-    setFen(game.fen());
-    setSelected(null);
-    setLegalTargets(new Set());
-    setCaptureTargets(new Set());
-    setLastMove(null);
-    setAnimatingMove(null);
-    setCaptures({ white: [], black: [] });
-    setViewPly(0);
-    setFullHistory([]);
-    engine.clearBestMove();
-    engine.stop();
+    resetGame();
 
-    // Commit the new game settings so other components see the updated
-    // gameMode/level/side immediately.
     setCommittedSettings({
       ...settings,
       gameMode: config.mode,
-      engineLevel: (config.level ?? settings.engineLevel),
-      playerSide: (config.side ?? settings.playerSide),
+      engineLevel: config.level ?? settings.engineLevel,
+      playerSide: config.side ?? settings.playerSide,
     });
 
-    // Pick engine side
-    let side: 'w' | 'b' | null = null;
     if (config.mode === 'computer') {
-      if (config.side === 'random') {
-        side = Math.random() < 0.5 ? 'w' : 'b';
-      } else if (config.side === 'w') {
-        side = 'b';
-      } else {
-        side = 'w';
-      }
+      setEngineSide(pickEngineSide(config.side ?? settings.playerSide));
+    } else if (config.mode === 'analysis') {
+      setEngineSide(null);
+    } else {
+      setEngineSide(null);
     }
-    setEngineSide(side);
 
-    // Set up clock
-    const totalSeconds = config.timeMin * 60 + config.timeSec;
-    if (totalSeconds > 0 || config.increment > 0) {
-      clock.reset({ initialSeconds: totalSeconds, incrementSeconds: config.increment });
-      setClockEnabled(true);
-      clock.switchTo('w');
+    if (isPlayMode(config.mode)) {
+      const totalSeconds = config.timeMin * 60 + config.timeSec;
+      if (totalSeconds > 0 || config.increment > 0) {
+        clock.reset({ initialSeconds: totalSeconds, incrementSeconds: config.increment });
+        setClockEnabled(true);
+        clock.switchTo('w');
+      } else {
+        clock.reset({ initialSeconds: 0, incrementSeconds: 0 });
+        setClockEnabled(false);
+      }
     } else {
       clock.reset({ initialSeconds: 0, incrementSeconds: 0 });
       setClockEnabled(false);
@@ -445,27 +400,19 @@ function App() {
     setNewGameOpen(false);
   };
 
-  // Undo: only enabled in computer mode. Deletes the engine's last response
-  // (and your last move) so the human can try a different move.
+  // -------- Undo (computer mode only) --------
   const onUndo = () => {
     if (animatingMove) return;
     if (settings.gameMode !== 'computer') return;
     if (fullHistory.length === 0) return;
+    if (viewPly < fullHistory.length) jumpToPly(fullHistory.length);
 
-    // If we're viewing a past position, first jump back to the latest.
-    if (viewPly < fullHistory.length) {
-      jumpToPly(fullHistory.length);
-    }
-
-    // Truncate the last move (the engine's response)
     const newHistory = fullHistory.slice(0, -1);
     setFullHistory(newHistory);
-
-    // Rebuild game state
     game.reset();
     const newCaptures = { white: [] as Piece[], black: [] as Piece[] };
-    for (let i = 0; i < newHistory.length; i++) {
-      const r = game.moveSan(newHistory[i]);
+    for (const san of newHistory) {
+      const r = game.moveSan(san);
       if (r && r.isCapture && r.captured) {
         const cp: Piece = {
           color: r.color === 'w' ? 'b' : 'w',
@@ -483,13 +430,9 @@ function App() {
     engine.stop();
   };
 
-  const onFlip = () => setOrientation((o) => (o === 'w' ? 'b' : 'w'));
-
-  // Jump to a specific ply. Reads from fullHistory so future moves are
-  // preserved. Does NOT delete anything.
+  // -------- History navigation (pure navigation, never deletes) --------
   const jumpToPly = (ply: number) => {
     if (animatingMove) return;
-    const history = fullHistory;
     if (ply < 0) {
       game.reset();
       setFen(INITIAL_FEN);
@@ -499,48 +442,90 @@ function App() {
       return;
     }
     game.reset();
-    for (let i = 0; i < ply && i < history.length; i++) {
-      game.moveSan(history[i]);
+    for (let i = 0; i < ply && i < fullHistory.length; i++) {
+      game.moveSan(fullHistory[i]);
     }
     setFen(game.fen());
     setViewPly(ply);
-    // Show the last move of the jumped-to position for context
     if (ply > 0) {
-      const allMoves = game.historyVerbose();
-      const m = allMoves[allMoves.length - 1];
-      if (m) {
-        setLastMove({ from: m.from as Square, to: m.to as Square });
-      } else {
-        setLastMove(null);
-      }
+      const moves = game.historyVerbose();
+      const m = moves[moves.length - 1];
+      setLastMove(m ? { from: m.from as Square, to: m.to as Square } : null);
     } else {
       setLastMove(null);
     }
     setSelected(null);
   };
-
   const onJumpTo = (ply: number) => jumpToPly(ply);
-
   const onJumpStart = () => jumpToPly(0);
   const onJumpBack = () => jumpToPly(Math.max(0, viewPly - 1));
   const onJumpForward = () => jumpToPly(Math.min(fullHistory.length, viewPly + 1));
   const onJumpEnd = () => jumpToPly(fullHistory.length);
 
-  // Analysis mode = reviewing a past position OR game is finished.
-  // During live play (in computer or local mode), hide the eval bar so the
-  // player isn't tempted to use engine hints.
-  const isAnalysisMode = viewPly < fullHistory.length || snapshot.isGameOver;
+  const onFlip = () => setOrientation((o) => (o === 'w' ? 'b' : 'w'));
 
-  // Whether the engine should be thinking right now.
-  // = reviewing past position, game over, or it's the engine's turn in computer mode.
+  // -------- Game end / review --------
+  const isGameEnded = !!(snapshot.isGameOver || gameEndReason);
+
+  // Auto-stop engine if game ended
+  useEffect(() => {
+    if (isGameEnded) {
+      engine.stop();
+      clock.switchTo(null);
+    }
+  }, [isGameEnded, clock, engine]);
+
+  // Draw / resign only in play modes
+  const canOfferDraw = isPlayMode(settings.gameMode);
+  const canResign = isPlayMode(settings.gameMode);
+
+  const onOfferDraw = () => {
+    if (!canOfferDraw) return;
+    if (isGameEnded) return;
+    if (settings.gameMode === 'computer') {
+      // Engine would normally accept/reject; we just decline
+      emit({ type: 'illegal' });
+      return;
+    }
+    setDrawOffer(game.turn());
+  };
+  const onAcceptDraw = () => {
+    setDrawOffer(null);
+    setGameEndReason({ kind: 'draw' });
+  };
+  const onDeclineDraw = () => setDrawOffer(null);
+
+  const onResign = () => {
+    if (!canResign || isGameEnded) return;
+    if (settings.gameMode === 'computer' && engineSide !== null) {
+      const human: 'w' | 'b' = engineSide === 'w' ? 'b' : 'w';
+      setGameEndReason({ kind: 'resign', side: human });
+    } else {
+      setGameEndReason({ kind: 'resign', side: game.turn() });
+    }
+  };
+
+  const onReview = () => {
+    // The game has ended; jump to the start so the user can review with
+    // the engine thinking on every position they navigate to.
+    setReviewing(true);
+    jumpToPly(0);
+  };
+
+  // -------- Engine integration --------
+  // The engine should think:
+  //   - during analysis mode (anytime the user is exploring)
+  //   - when the user is reviewing past moves (post-game review)
+  //   - when it's the engine's turn in computer mode and game is ongoing
+  const isEngineTurn =
+    settings.gameMode === 'computer' &&
+    engineSide !== null &&
+    viewPly === fullHistory.length &&
+    game.turn() === engineSide;
   const isEngineThinking =
-    isAnalysisMode ||
-    (settings.gameMode === 'computer' &&
-      engineSide !== null &&
-      viewPly === fullHistory.length &&
-      game.turn() === engineSide &&
-      !snapshot.isGameOver &&
-      !gameEndReason);
+    settings.gameMode === 'analysis' ||
+    reviewing ||
+    isEngineTurn;
 
   useEffect(() => {
     if (isEngineThinking) {
@@ -551,25 +536,14 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fen, isEngineThinking]);
 
-  // If we're at the latest ply, the engine is to move (computer mode) - let it think
+  // Apply engine's best move
   useEffect(() => {
     if (
+      engine.bestMove &&
       settings.gameMode === 'computer' &&
       engineSide !== null &&
-      viewPly === fullHistory.length &&
-      game.turn() === engineSide &&
-      !snapshot.isGameOver &&
-      !engine.bestMove
+      game.turn() === engineSide
     ) {
-      // The fen-change effect already requested eval; just ensure the engine is thinking
-      // The useEngine hook will set bestMove when done
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewPly, engineSide, settings.gameMode, snapshot.isGameOver]);
-
-  // When the engine reports a bestmove, apply it
-  useEffect(() => {
-    if (engine.bestMove && settings.gameMode === 'computer' && engineSide !== null && game.turn() === engineSide) {
       const m = engine.bestMove;
       engine.clearBestMove();
       const from = m.slice(0, 2) as Square;
@@ -580,26 +554,9 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine.bestMove]);
 
-  useEffect(() => {
-    if (snapshot.isGameOver) {
-      setSelected(null);
-      setLegalTargets(new Set());
-      setCaptureTargets(new Set());
-      clock.switchTo(null);
-    }
-  }, [snapshot.isGameOver, clock]);
-
-  // Handle time-out: if the clock says one side ran out, declare the game over
-  useEffect(() => {
-    if (clock.winner && clockEnabled && !snapshot.isGameOver) {
-      // The side that ran out is the loser. We don't have a chess.js hook for this,
-      // but for now we just show the status. The board state is unchanged.
-      // (We could mutate FEN, but the simplest is to show "Time out".)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clock.winner]);
-
-  const isGameEnded = snapshot.isGameOver || gameEndReason !== null;
+  // -------- Status text --------
+  const showEvalBar = settings.evalBarEnabled && isEngineThinking;
+  const isReviewMode = reviewing && isGameEnded;
 
   const statusText = (() => {
     if (gameEndReason?.kind === 'draw') return 'Draw by agreement';
@@ -620,6 +577,9 @@ function App() {
     if (snapshot.isDraw) return 'Draw';
     if (drawOffer && settings.gameMode === 'local') {
       return `${drawOffer === 'w' ? 'White' : 'Black'} offers a draw`;
+    }
+    if (settings.gameMode === 'analysis') {
+      return `${snapshot.turn === 'w' ? 'White' : 'Black'} to move • Analysis`;
     }
     if (settings.gameMode === 'computer' && engineSide !== null) {
       const human = engineSide === 'w' ? 'Black' : 'White';
@@ -657,7 +617,7 @@ function App() {
               label={topSide === 'w' ? 'White' : 'Black'}
             />
           )}
-          {settings.evalBarEnabled && isAnalysisMode && settings.evalBarPosition === 'top' && (
+          {showEvalBar && settings.evalBarPosition === 'top' && (
             <EvalBar
               scoreCp={engine.scoreCp}
               scoreMate={engine.scoreMate}
@@ -667,10 +627,8 @@ function App() {
               title={engine.bestLine ? `Depth ${engine.bestLine.depth}` : 'Eval'}
             />
           )}
-          <div
-            className={`board-row eval-pos-${settings.evalBarPosition}`}
-          >
-            {settings.evalBarEnabled && isAnalysisMode && settings.evalBarPosition === 'left' && (
+          <div className={`board-row eval-pos-${settings.evalBarPosition}`}>
+            {showEvalBar && settings.evalBarPosition === 'left' && (
               <EvalBar
                 scoreCp={engine.scoreCp}
                 scoreMate={engine.scoreMate}
@@ -697,7 +655,7 @@ function App() {
               onDragEnd={handleDragEnd}
               onAnimationDone={() => setAnimatingMove(null)}
             />
-            {settings.evalBarEnabled && isAnalysisMode && settings.evalBarPosition === 'right' && (
+            {showEvalBar && settings.evalBarPosition === 'right' && (
               <EvalBar
                 scoreCp={engine.scoreCp}
                 scoreMate={engine.scoreMate}
@@ -708,7 +666,7 @@ function App() {
               />
             )}
           </div>
-          {settings.evalBarEnabled && isAnalysisMode && settings.evalBarPosition === 'bottom' && (
+          {showEvalBar && settings.evalBarPosition === 'bottom' && (
             <EvalBar
               scoreCp={engine.scoreCp}
               scoreMate={engine.scoreMate}
@@ -727,6 +685,18 @@ function App() {
             />
           )}
           <CapturedRow captures={captures} side={bottomSide} />
+          {isGameEnded && !isReviewMode && (
+            <div className="post-game-actions">
+              <button className="primary-action" onClick={onReview}>
+                Review
+              </button>
+            </div>
+          )}
+          {isReviewMode && (
+            <div className="post-game-actions">
+              <button onClick={() => setReviewing(false)}>Back to result</button>
+            </div>
+          )}
           <div className="controls">
             <button onClick={() => setNewGameOpen(true)}>New Game</button>
             <button
@@ -737,25 +707,29 @@ function App() {
                 animatingMove !== null ||
                 isGameEnded
               }
-              title={settings.gameMode === 'computer' ? 'Undo last move' : 'Undo only available vs Computer'}
+              title={
+                settings.gameMode === 'computer'
+                  ? 'Undo last move'
+                  : 'Undo only available vs Computer'
+              }
             >
               Undo
             </button>
             <button onClick={onFlip}>Flip</button>
-            {!drawOffer && !isGameEnded && (
+            {canOfferDraw && !drawOffer && !isGameEnded && (
               <button onClick={onOfferDraw} title="Offer a draw">
                 Draw
               </button>
             )}
-            {drawOffer && settings.gameMode === 'local' && (
+            {canOfferDraw && drawOffer && settings.gameMode === 'local' && (
               <>
                 <button onClick={onAcceptDraw} className="primary-action">
-                  Accept Draw
+                  Accept
                 </button>
                 <button onClick={onDeclineDraw}>Decline</button>
               </>
             )}
-            {!isGameEnded && (
+            {canResign && !isGameEnded && (
               <button onClick={onResign} className="danger-action" title="Resign the game">
                 Resign
               </button>
@@ -769,9 +743,9 @@ function App() {
           <div className="side-panel-spacer" aria-hidden="true" />
           <MoveHistory
             history={fullHistory}
-            sanMoves={sanMoves}
+            sanMoves={useMemo(() => fullHistory.map((san) => ({ san } as LegalMove)), [fullHistory])}
             currentPly={viewPly - 1}
-            onJumpTo={(p) => onJumpTo(p)}
+            onJumpTo={onJumpTo}
             onJumpStart={onJumpStart}
             onJumpBack={onJumpBack}
             onJumpForward={onJumpForward}

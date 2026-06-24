@@ -251,6 +251,9 @@ body {
 .ng-seg.small {
   grid-template-columns: repeat(3, 1fr);
 }
+.ng-seg.three {
+  grid-template-columns: repeat(3, 1fr);
+}
 .ng-seg-btn {
   display: flex;
   flex-direction: column;
@@ -594,6 +597,31 @@ body {
   user-select: none;
 }
 .file-coord { text-align: center; }
+
+.post-game-actions {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 0;
+  gap: 8px;
+}
+.post-game-actions .primary-action,
+.post-game-actions button {
+  background: var(--accent-strong);
+  color: white;
+  border: 1px solid var(--accent-strong);
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.post-game-actions button:not(.primary-action) {
+  background: var(--bg-elev);
+  color: var(--text);
+  border-color: var(--border-clr);
+}
+.post-game-actions button:hover { filter: brightness(1.1); }
 
 .controls {
   display: flex;
