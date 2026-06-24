@@ -342,6 +342,14 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-width: 0;
+}
+
+/* Spacer to align the Moves panel with the top of the board.
+   Matches: header (28px incl margin) + status (~32px) + captured top row (~32px) + 3 gaps (18px) = 110px. */
+.side-panel-spacer {
+  height: 110px;
+  flex-shrink: 0;
 }
 
 .move-history {

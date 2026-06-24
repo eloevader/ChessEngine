@@ -393,6 +393,7 @@ function App() {
           </div>
         </div>
         <aside className="side-panel">
+          <div className="side-panel-spacer" aria-hidden="true" />
           <MoveHistory
             history={snapshot.history}
             sanMoves={sanMoves}
