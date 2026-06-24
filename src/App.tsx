@@ -1,0 +1,345 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { DragEvent } from 'react';
+import { Board } from './components/Board';
+import { MoveHistory } from './components/MoveHistory';
+import { PromotionDialog } from './components/PromotionDialog';
+import { GameState, type LegalMove } from './chess/GameState';
+import type { Piece, Square } from './chess/types';
+import './App.css';
+
+type PendingPromotion = {
+  from: Square;
+  to: Square;
+  color: 'w' | 'b';
+} | null;
+
+const game = new GameState();
+
+function buildBoard(fen: string): (Piece | null)[][] {
+  const placement = fen.split(' ')[0];
+  const rows = placement.split('/');
+  const board: (Piece | null)[][] = [];
+  for (const row of rows) {
+    const boardRow: (Piece | null)[] = [];
+    for (const ch of row) {
+      if (/[1-8]/.test(ch)) {
+        const empty = parseInt(ch, 10);
+        for (let i = 0; i < empty; i++) boardRow.push(null);
+      } else {
+        const color: 'w' | 'b' = ch === ch.toUpperCase() ? 'w' : 'b';
+        const type = ch.toLowerCase() as Piece['type'];
+        boardRow.push({ type, color });
+      }
+    }
+    board.push(boardRow);
+  }
+  return board;
+}
+
+function findKingSquare(fen: string, color: 'w' | 'b'): Square | null {
+  const board = buildBoard(fen);
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const p = board[r][c];
+      if (p && p.type === 'k' && p.color === color) {
+        return (String.fromCharCode(97 + c) + (8 - r)) as Square;
+      }
+    }
+  }
+  return null;
+}
+
+function App() {
+  const [fen, setFen] = useState(game.fen());
+  const [, setVersion] = useState(0);
+  const [selected, setSelected] = useState<Square | null>(null);
+  const [legalTargets, setLegalTargets] = useState<Set<Square>>(new Set());
+  const [captureTargets, setCaptureTargets] = useState<Set<Square>>(new Set());
+  const [lastMove, setLastMove] = useState<{ from: Square; to: Square } | null>(null);
+  const [orientation, setOrientation] = useState<'w' | 'b'>('w');
+  const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion>(null);
+  const [dragFrom, setDragFrom] = useState<Square | null>(null);
+
+  const refresh = useCallback(() => setVersion((v) => v + 1), []);
+
+  const snapshot = game.snapshot();
+  const board = useMemo(() => buildBoard(fen), [fen]);
+  const kingInCheck = useMemo(() => {
+    if (!snapshot.inCheck) return null;
+    return findKingSquare(fen, snapshot.turn);
+  }, [fen, snapshot.inCheck, snapshot.turn]);
+
+  const sanMoves = useMemo<LegalMove[]>(() => {
+    return snapshot.history.map((san) => ({ san } as LegalMove));
+  }, [snapshot.history]);
+
+  const handleSquareClick = useCallback(
+    (square: Square) => {
+      if (pendingPromotion) return;
+      if (snapshot.isGameOver) return;
+
+      const piece = game.pieceAt(square);
+
+      if (selected === null) {
+        if (piece && piece.color === game.turn()) {
+          setSelected(square);
+          const moves = game.legalMovesFrom(square);
+          const targets = new Set<Square>();
+          const captures = new Set<Square>();
+          for (const m of moves) {
+            if (m.isCapture) captures.add(m.to as Square);
+            else targets.add(m.to as Square);
+          }
+          setLegalTargets(targets);
+          setCaptureTargets(captures);
+        }
+        return;
+      }
+
+      if (square === selected) {
+        setSelected(null);
+        setLegalTargets(new Set());
+        setCaptureTargets(new Set());
+        return;
+      }
+
+      if (legalTargets.has(square) || captureTargets.has(square)) {
+        const fromPiece = game.pieceAt(selected);
+        const isPromotion = fromPiece?.type === 'p' && (square[1] === '1' || square[1] === '8');
+        if (isPromotion) {
+          setPendingPromotion({ from: selected, to: square, color: fromPiece!.color });
+          return;
+        }
+        const result = game.move(selected, square);
+        if (result) {
+          setLastMove({ from: result.from as Square, to: result.to as Square });
+          setFen(game.fen());
+          refresh();
+        }
+        setSelected(null);
+        setLegalTargets(new Set());
+        setCaptureTargets(new Set());
+        return;
+      }
+
+      if (piece && piece.color === game.turn()) {
+        setSelected(square);
+        const moves = game.legalMovesFrom(square);
+        const targets = new Set<Square>();
+        const captures = new Set<Square>();
+        for (const m of moves) {
+          if (m.isCapture) captures.add(m.to as Square);
+          else targets.add(m.to as Square);
+        }
+        setLegalTargets(targets);
+        setCaptureTargets(captures);
+        return;
+      }
+
+      setSelected(null);
+      setLegalTargets(new Set());
+      setCaptureTargets(new Set());
+    },
+    [selected, legalTargets, captureTargets, snapshot.isGameOver, pendingPromotion, refresh],
+  );
+
+  const handleDragStart = useCallback(
+    (e: DragEvent<HTMLDivElement>, from: Square, piece: Piece) => {
+      if (snapshot.isGameOver) {
+        e.preventDefault();
+        return;
+      }
+      if (piece.color !== game.turn()) {
+        e.preventDefault();
+        return;
+      }
+      e.dataTransfer.setData('text/plain', from);
+      e.dataTransfer.effectAllowed = 'move';
+      setDragFrom(from);
+      setSelected(from);
+      const moves = game.legalMovesFrom(from);
+      const targets = new Set<Square>();
+      const captures = new Set<Square>();
+      for (const m of moves) {
+        if (m.isCapture) captures.add(m.to as Square);
+        else targets.add(m.to as Square);
+      }
+      setLegalTargets(targets);
+      setCaptureTargets(captures);
+    },
+    [snapshot.isGameOver],
+  );
+
+  const handleDragOverSquare = useCallback((e: DragEvent<HTMLDivElement>, _square: Square) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const handleDropOnSquare = useCallback(
+    (e: DragEvent<HTMLDivElement>, to: Square) => {
+      e.preventDefault();
+      const from = (e.dataTransfer.getData('text/plain') || dragFrom) as Square | null;
+      setDragFrom(null);
+      if (!from || from === to) {
+        setSelected(null);
+        setLegalTargets(new Set());
+        setCaptureTargets(new Set());
+        return;
+      }
+      const fromPiece = game.pieceAt(from);
+      if (!fromPiece) return;
+      const isPromotion = fromPiece.type === 'p' && (to[1] === '1' || to[1] === '8');
+      if (isPromotion) {
+        setPendingPromotion({ from, to, color: fromPiece.color });
+        return;
+      }
+      const result = game.move(from, to);
+      if (result) {
+        setLastMove({ from: result.from as Square, to: result.to as Square });
+        setFen(game.fen());
+        refresh();
+      }
+      setSelected(null);
+      setLegalTargets(new Set());
+      setCaptureTargets(new Set());
+    },
+    [dragFrom, refresh],
+  );
+
+  const handleDragEnd = useCallback(() => {
+    setDragFrom(null);
+    setSelected(null);
+    setLegalTargets(new Set());
+    setCaptureTargets(new Set());
+  }, []);
+
+  const onChoosePromotion = (piece: 'q' | 'r' | 'b' | 'n') => {
+    if (!pendingPromotion) return;
+    const result = game.move(pendingPromotion.from, pendingPromotion.to, piece);
+    if (result) {
+      setLastMove({ from: result.from as Square, to: result.to as Square });
+      setFen(game.fen());
+      refresh();
+    }
+    setPendingPromotion(null);
+    setSelected(null);
+    setLegalTargets(new Set());
+    setCaptureTargets(new Set());
+  };
+
+  const onCancelPromotion = () => setPendingPromotion(null);
+
+  const onReset = () => {
+    game.reset();
+    setFen(game.fen());
+    setSelected(null);
+    setLegalTargets(new Set());
+    setCaptureTargets(new Set());
+    setLastMove(null);
+    refresh();
+  };
+
+  const onUndo = () => {
+    const result = game.undo();
+    if (result) {
+      setFen(game.fen());
+      setLastMove(null);
+      refresh();
+    }
+  };
+
+  const onFlip = () => setOrientation((o) => (o === 'w' ? 'b' : 'w'));
+
+  const onJumpTo = (ply: number) => {
+    game.reset();
+    for (let i = 0; i <= ply && i < snapshot.history.length; i++) {
+      game.moveSan(snapshot.history[i]);
+    }
+    setFen(game.fen());
+    setLastMove(null);
+    setSelected(null);
+    refresh();
+  };
+
+  useEffect(() => {
+    if (snapshot.isGameOver) {
+      setSelected(null);
+      setLegalTargets(new Set());
+      setCaptureTargets(new Set());
+    }
+  }, [snapshot.isGameOver]);
+
+  const statusText = (() => {
+    if (snapshot.isCheckmate) {
+      return `Checkmate — ${snapshot.turn === 'w' ? 'Black' : 'White'} wins`;
+    }
+    if (snapshot.isStalemate) return 'Stalemate — Draw';
+    if (snapshot.isInsufficientMaterial) return 'Draw — Insufficient material';
+    if (snapshot.isThreefoldRepetition) return 'Draw — Threefold repetition';
+    if (snapshot.isDraw) return 'Draw';
+    if (snapshot.inCheck) return `${snapshot.turn === 'w' ? 'White' : 'Black'} to move — Check`;
+    return `${snapshot.turn === 'w' ? 'White' : 'Black'} to move`;
+  })();
+
+  return (
+    <div className="app">
+      <header className="app-header">
+        <h1>Chess Analyzer</h1>
+        <p className="subtitle">Free · Stockfish · Lichess</p>
+      </header>
+      <main className="app-main">
+        <div className="board-area">
+          <div className="status-bar" data-status={snapshot.inCheck ? 'check' : ''}>
+            {statusText}
+          </div>
+          <Board
+            board={board}
+            orientation={orientation}
+            selectedSquare={selected}
+            legalTargets={legalTargets}
+            captureTargets={captureTargets}
+            lastMove={lastMove}
+            kingInCheck={kingInCheck}
+            onSquareClick={handleSquareClick}
+            onDragStart={handleDragStart}
+            onDragOverSquare={handleDragOverSquare}
+            onDropOnSquare={handleDropOnSquare}
+            onDragEnd={handleDragEnd}
+          />
+          <div className="controls">
+            <button onClick={onReset}>New Game</button>
+            <button onClick={onUndo} disabled={snapshot.history.length === 0}>
+              Undo
+            </button>
+            <button onClick={onFlip}>Flip</button>
+          </div>
+        </div>
+        <aside className="side-panel">
+          <MoveHistory
+            history={snapshot.history}
+            sanMoves={sanMoves}
+            currentPly={snapshot.history.length - 1}
+            onJumpTo={onJumpTo}
+          />
+          <div className="fen-box">
+            <h4>FEN</h4>
+            <code>{snapshot.fen}</code>
+          </div>
+          <div className="hint">
+            <p>Click a piece, then a highlighted square. Drag &amp; drop also works.</p>
+            <p>Castling, en passant, and promotion are all supported.</p>
+          </div>
+        </aside>
+      </main>
+      {pendingPromotion && (
+        <PromotionDialog
+          color={pendingPromotion.color}
+          onChoose={onChoosePromotion}
+          onCancel={onCancelPromotion}
+        />
+      )}
+    </div>
+  );
+}
+
+export default App;
