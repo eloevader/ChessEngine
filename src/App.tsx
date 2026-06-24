@@ -5,12 +5,16 @@ import { PromotionDialog } from './components/PromotionDialog';
 import { SettingsPanel } from './components/SettingsPanel';
 import { CapturedRow } from './components/CapturedPieces';
 import { EvalBar } from './components/EvalBar';
+import { ClockDisplay } from './components/ClockDisplay';
+import { NewGameDialog } from './components/NewGameDialog';
 import { GameState, type LegalMove } from './chess/GameState';
 import type { Piece, Square } from './chess/types';
 import { useSettings, ANIMATION_DURATIONS_MS } from './settings/SettingsStore';
 import { useSound } from './settings/SoundManager';
 import { getTheme, themeToCss } from './chess/themes';
 import { useEngine } from './engine/useEngine';
+import { useChessClock } from './chess/ChessClock';
+import type { GameMode, PlayerSide, EngineLevel } from './settings/SettingsStore';
 import './App.css';
 
 type PendingPromotion = {
@@ -26,6 +30,15 @@ type AnimatingMove = {
   isCapture: boolean;
   captured: Piece | null;
 } | null;
+
+interface GameConfig {
+  mode: GameMode;
+  level?: EngineLevel;
+  side?: PlayerSide;
+  timeMin: number;
+  timeSec: number;
+  increment: number;
+}
 
 const game = new GameState();
 const INITIAL_FEN = game.fen();
@@ -68,6 +81,7 @@ function App() {
   const settings = useSettings();
   const { emit } = useSound();
   const engine = useEngine();
+  const clock = useChessClock();
 
   const [fen, setFen] = useState(game.fen());
   const [selected, setSelected] = useState<Square | null>(null);
@@ -78,11 +92,14 @@ function App() {
   const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion>(null);
   const [animatingMove, setAnimatingMove] = useState<AnimatingMove>(null);
   const [settingsOpen, setSettingsOpen] = useState(settings.showSettingsOnStart);
+  const [newGameOpen, setNewGameOpen] = useState(false);
   const [captures, setCaptures] = useState<{ white: Piece[]; black: Piece[] }>({ white: [], black: [] });
   /** Ply at which we are currently viewing (default = end of game). */
   const [viewPly, setViewPly] = useState<number>(0);
   /** Side chosen for computer opponent (resolved at game start if 'random'). */
   const [engineSide, setEngineSide] = useState<'w' | 'b' | null>(null);
+  /** Whether the game has a clock (and which side is the human in computer mode). */
+  const [clockEnabled, setClockEnabled] = useState(false);
 
   const snapshot = game.snapshot();
   const board = useMemo(() => buildBoard(fen), [fen]);
@@ -146,6 +163,13 @@ function App() {
       setFen(game.fen());
       setViewPly((v) => v + 1);
 
+      // Clock: add increment to the side that just moved, then switch to opponent
+      if (clockEnabled) {
+        clock.addIncrement(result.color);
+        const next = game.turn();
+        clock.switchTo(next);
+      }
+
       if (result.captured) {
         const capturedPiece: Piece = {
           color: result.color === 'w' ? 'b' : 'w',
@@ -173,7 +197,7 @@ function App() {
       }
       return result;
     },
-    [emit, settings.flipAfterMove, settings.animationSpeed],
+    [emit, settings.flipAfterMove, settings.animationSpeed, clock, clockEnabled],
   );
 
   const handleSquareClick = useCallback(
@@ -308,7 +332,7 @@ function App() {
 
   const onCancelPromotion = () => setPendingPromotion(null);
 
-  const onReset = () => {
+  const _onReset = () => {
     game.reset();
     setFen(game.fen());
     setSelected(null);
@@ -321,6 +345,49 @@ function App() {
     setEngineSide(null);
     engine.clearBestMove();
     engine.stop();
+    clock.reset({ initialSeconds: 0, incrementSeconds: 0 });
+    setClockEnabled(false);
+  };
+  void _onReset;
+
+  const onStartNewGame = (config: GameConfig) => {
+    game.reset();
+    setFen(game.fen());
+    setSelected(null);
+    setLegalTargets(new Set());
+    setCaptureTargets(new Set());
+    setLastMove(null);
+    setAnimatingMove(null);
+    setCaptures({ white: [], black: [] });
+    setViewPly(0);
+    engine.clearBestMove();
+    engine.stop();
+
+    // Pick engine side
+    let side: 'w' | 'b' | null = null;
+    if (config.mode === 'computer') {
+      if (config.side === 'random') {
+        side = Math.random() < 0.5 ? 'w' : 'b';
+      } else if (config.side === 'w') {
+        side = 'b';
+      } else {
+        side = 'w';
+      }
+    }
+    setEngineSide(side);
+
+    // Set up clock
+    const totalSeconds = config.timeMin * 60 + config.timeSec;
+    if (totalSeconds > 0 || config.increment > 0) {
+      clock.reset({ initialSeconds: totalSeconds, incrementSeconds: config.increment });
+      setClockEnabled(true);
+      clock.switchTo('w');
+    } else {
+      clock.reset({ initialSeconds: 0, incrementSeconds: 0 });
+      setClockEnabled(false);
+    }
+
+    setNewGameOpen(false);
   };
 
   // Undo: delete the last move (and any subsequent move by the engine)
@@ -440,10 +507,24 @@ function App() {
       setSelected(null);
       setLegalTargets(new Set());
       setCaptureTargets(new Set());
+      clock.switchTo(null);
     }
-  }, [snapshot.isGameOver]);
+  }, [snapshot.isGameOver, clock]);
+
+  // Handle time-out: if the clock says one side ran out, declare the game over
+  useEffect(() => {
+    if (clock.winner && clockEnabled && !snapshot.isGameOver) {
+      // The side that ran out is the loser. We don't have a chess.js hook for this,
+      // but for now we just show the status. The board state is unchanged.
+      // (We could mutate FEN, but the simplest is to show "Time out".)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clock.winner]);
 
   const statusText = (() => {
+    if (clockEnabled && clock.winner) {
+      return `Time — ${clock.winner === 'w' ? 'White' : 'Black'} wins on time`;
+    }
     if (snapshot.isCheckmate) {
       return `Checkmate — ${snapshot.turn === 'w' ? 'Black' : 'White'} wins`;
     }
@@ -479,6 +560,14 @@ function App() {
             {settings.gameMode === 'computer' && engine.status === 'loading' && ' • loading engine…'}
           </div>
           <CapturedRow captures={captures} side={topSide} />
+          {clockEnabled && (
+            <ClockDisplay
+              side={topSide}
+              seconds={topSide === 'w' ? clock.whiteSeconds : clock.blackSeconds}
+              active={clock.running === topSide}
+              label={topSide === 'w' ? 'White' : 'Black'}
+            />
+          )}
           <div className="board-row">
             {settings.evalBarEnabled && (
               <EvalBar
@@ -505,9 +594,17 @@ function App() {
               onAnimationDone={() => setAnimatingMove(null)}
             />
           </div>
+          {clockEnabled && (
+            <ClockDisplay
+              side={bottomSide}
+              seconds={bottomSide === 'w' ? clock.whiteSeconds : clock.blackSeconds}
+              active={clock.running === bottomSide}
+              label={bottomSide === 'w' ? 'White' : 'Black'}
+            />
+          )}
           <CapturedRow captures={captures} side={bottomSide} />
           <div className="controls">
-            <button onClick={onReset}>New Game</button>
+            <button onClick={() => setNewGameOpen(true)}>New Game</button>
             <button onClick={onUndo} disabled={snapshot.history.length === 0 || animatingMove !== null}>
               Undo
             </button>
@@ -535,6 +632,11 @@ function App() {
         />
       )}
       <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <NewGameDialog
+        open={newGameOpen}
+        onStart={onStartNewGame}
+        onCancel={() => setNewGameOpen(false)}
+      />
     </div>
   );
 }

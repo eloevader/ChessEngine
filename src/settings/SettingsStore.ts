@@ -7,6 +7,7 @@ export type SoundPack = 'classic' | 'retro' | 'modern' | 'arcade' | 'soft';
 export type CoordDisplay = 'off' | 'inside' | 'outside' | 'all';
 export type GameMode = 'local' | 'computer';
 export type PlayerSide = 'w' | 'b' | 'random';
+export type EngineLevel = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
 export interface Settings {
   boardThemeId: string;

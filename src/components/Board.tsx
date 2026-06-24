@@ -78,53 +78,55 @@ export function Board(props: BoardProps) {
   return (
     <div className="board-frame">
       <div className="coord-box">
+        <div className="coord-corner coord-corner-tl" />
         <div className="coord-edge coord-top">
-          {showOutside && <div className="files-row-top">{files.map((f) => (
+          {showOutside && <div className="files-row">{files.map((f) => (
             <span key={f} className="coord file-coord">{f}</span>
           ))}</div>}
         </div>
-        <div className="coord-middle">
-          <div className="coord-edge coord-left">
-            {showOutside && <div className="ranks-col">{ranks.map((r) => (
-              <span key={r} className="coord rank-coord">{r}</span>
-            ))}</div>}
-          </div>
-          <div
-            className="board"
-            style={{ '--board-anim-ms': `${ANIMATION_DURATIONS_MS[settings.animationSpeed]}ms` } as CSSProperties}
-          >
-            {displaySquares.map(({ square, piece }) => (
-              <BoardSquare
-                key={square}
-                square={square}
-                piece={piece}
-                isSelected={selectedSquare === square}
-                isLegalTarget={legalTargets.has(square)}
-                isCaptureTarget={captureTargets.has(square)}
-                isLastMoveFrom={lastMove?.from === square}
-                isLastMoveTo={lastMove?.to === square}
-                isCheck={kingInCheck === square}
-                coordDisplay={settings.coordDisplay}
-                onSquareClick={onSquareClick}
-                onPieceDragStart={onPieceDragStart}
-                onDragOverSquare={onDragOverSquare}
-                onDropOnSquare={onDropOnSquare}
-                onDragEnd={onDragEnd}
-              />
-            ))}
-            {animatingMove && <AnimatedPiece anim={animatingMove} onDone={onAnimationDone} />}
-          </div>
-          <div className="coord-edge coord-right">
-            {showOutside && <div className="ranks-col mirror">{ranks.map((r) => (
-              <span key={r} className="coord rank-coord">{r}</span>
-            ))}</div>}
-          </div>
+        <div className="coord-corner coord-corner-tr" />
+        <div className="coord-edge coord-left">
+          {showOutside && <div className="ranks-col">{ranks.map((r) => (
+            <span key={r} className="coord rank-coord">{r}</span>
+          ))}</div>}
         </div>
+        <div
+          className="board"
+          style={{ '--board-anim-ms': `${ANIMATION_DURATIONS_MS[settings.animationSpeed]}ms` } as CSSProperties}
+        >
+          {displaySquares.map(({ square, piece }) => (
+            <BoardSquare
+              key={square}
+              square={square}
+              piece={piece}
+              isSelected={selectedSquare === square}
+              isLegalTarget={legalTargets.has(square)}
+              isCaptureTarget={captureTargets.has(square)}
+              isLastMoveFrom={lastMove?.from === square}
+              isLastMoveTo={lastMove?.to === square}
+              isCheck={kingInCheck === square}
+              coordDisplay={settings.coordDisplay}
+              onSquareClick={onSquareClick}
+              onPieceDragStart={onPieceDragStart}
+              onDragOverSquare={onDragOverSquare}
+              onDropOnSquare={onDropOnSquare}
+              onDragEnd={onDragEnd}
+            />
+          ))}
+          {animatingMove && <AnimatedPiece anim={animatingMove} onDone={onAnimationDone} />}
+        </div>
+        <div className="coord-edge coord-right">
+          {showOutside && <div className="ranks-col">{ranks.map((r) => (
+            <span key={r} className="coord rank-coord">{r}</span>
+          ))}</div>}
+        </div>
+        <div className="coord-corner coord-corner-bl" />
         <div className="coord-edge coord-bottom">
-          {showOutside && <div className="files-row-bottom">{files.map((f) => (
+          {showOutside && <div className="files-row">{files.map((f) => (
             <span key={f} className="coord file-coord">{f}</span>
           ))}</div>}
         </div>
+        <div className="coord-corner coord-corner-br" />
       </div>
     </div>
   );
