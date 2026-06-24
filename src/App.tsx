@@ -9,11 +9,12 @@ import { ClockDisplay } from './components/ClockDisplay';
 import { NewGameDialog } from './components/NewGameDialog';
 import { GameState, type LegalMove } from './chess/GameState';
 import type { Piece, Square } from './chess/types';
-import { useSettings, ANIMATION_DURATIONS_MS } from './settings/SettingsStore';
+import { useSettings, ANIMATION_DURATIONS_MS, setCommittedSettings } from './settings/SettingsStore';
 import { useSound } from './settings/SoundManager';
 import { getTheme, themeToCss } from './chess/themes';
 import { useEngine } from './engine/useEngine';
 import { useChessClock } from './chess/ChessClock';
+import { useThreats } from './chess/threats';
 import type { GameMode, PlayerSide, EngineLevel } from './settings/SettingsStore';
 import './App.css';
 
@@ -84,6 +85,7 @@ function App() {
   const clock = useChessClock();
 
   const [fen, setFen] = useState(game.fen());
+  const threats = useThreats(fen, settings.showThreats);
   const [selected, setSelected] = useState<Square | null>(null);
   const [legalTargets, setLegalTargets] = useState<Set<Square>>(new Set());
   const [captureTargets, setCaptureTargets] = useState<Set<Square>>(new Set());
@@ -351,8 +353,47 @@ function App() {
     engine.stop();
     clock.reset({ initialSeconds: 0, incrementSeconds: 0 });
     setClockEnabled(false);
+    setGameEndReason(null);
+    setDrawOffer(null);
   };
   void _onReset;
+
+  /** Manually-set end-of-game reason (resign / draw agreement). null means no
+   *  manual end; falls back to chess.js status. */
+  const [gameEndReason, setGameEndReason] = useState<
+    | { kind: 'resign'; side: 'w' | 'b' }
+    | { kind: 'draw' }
+    | null
+  >(null);
+  /** In 2-player mode, true if a draw has been offered by the current player. */
+  const [drawOffer, setDrawOffer] = useState<'w' | 'b' | null>(null);
+
+  const onOfferDraw = () => {
+    if (snapshot.isGameOver || gameEndReason) return;
+    if (settings.gameMode === 'computer' && engineSide !== null) {
+      // In computer mode, automatically decline (we don't have a real engine accept)
+      emit({ type: 'illegal' });
+      return;
+    }
+    setDrawOffer(game.turn());
+  };
+  const onAcceptDraw = () => {
+    setDrawOffer(null);
+    setGameEndReason({ kind: 'draw' });
+  };
+  const onDeclineDraw = () => setDrawOffer(null);
+
+  const onResign = () => {
+    if (snapshot.isGameOver || gameEndReason) return;
+    if (settings.gameMode === 'computer' && engineSide !== null) {
+      // Human side resigns
+      const human: 'w' | 'b' = engineSide === 'w' ? 'b' : 'w';
+      setGameEndReason({ kind: 'resign', side: human });
+    } else {
+      // Local mode: the side that's about to move resigns
+      setGameEndReason({ kind: 'resign', side: game.turn() });
+    }
+  };
 
   const onStartNewGame = (config: GameConfig) => {
     game.reset();
@@ -367,6 +408,15 @@ function App() {
     setFullHistory([]);
     engine.clearBestMove();
     engine.stop();
+
+    // Commit the new game settings so other components see the updated
+    // gameMode/level/side immediately.
+    setCommittedSettings({
+      ...settings,
+      gameMode: config.mode,
+      engineLevel: (config.level ?? settings.engineLevel),
+      playerSide: (config.side ?? settings.playerSide),
+    });
 
     // Pick engine side
     let side: 'w' | 'b' | null = null;
@@ -489,7 +539,8 @@ function App() {
       engineSide !== null &&
       viewPly === fullHistory.length &&
       game.turn() === engineSide &&
-      !snapshot.isGameOver);
+      !snapshot.isGameOver &&
+      !gameEndReason);
 
   useEffect(() => {
     if (isEngineThinking) {
@@ -548,7 +599,15 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clock.winner]);
 
+  const isGameEnded = snapshot.isGameOver || gameEndReason !== null;
+
   const statusText = (() => {
+    if (gameEndReason?.kind === 'draw') return 'Draw by agreement';
+    if (gameEndReason?.kind === 'resign') {
+      return `${gameEndReason.side === 'w' ? 'White' : 'Black'} resigns — ${
+        gameEndReason.side === 'w' ? 'Black' : 'White'
+      } wins`;
+    }
     if (clockEnabled && clock.winner) {
       return `Time — ${clock.winner === 'w' ? 'White' : 'Black'} wins on time`;
     }
@@ -559,6 +618,9 @@ function App() {
     if (snapshot.isInsufficientMaterial) return 'Draw — Insufficient material';
     if (snapshot.isThreefoldRepetition) return 'Draw — Threefold repetition';
     if (snapshot.isDraw) return 'Draw';
+    if (drawOffer && settings.gameMode === 'local') {
+      return `${drawOffer === 'w' ? 'White' : 'Black'} offers a draw`;
+    }
     if (settings.gameMode === 'computer' && engineSide !== null) {
       const human = engineSide === 'w' ? 'Black' : 'White';
       const eng = engineSide === 'w' ? 'White (Engine)' : 'Black (Engine)';
@@ -595,12 +657,26 @@ function App() {
               label={topSide === 'w' ? 'White' : 'Black'}
             />
           )}
-          <div className="board-row">
-            {settings.evalBarEnabled && isAnalysisMode && (
+          {settings.evalBarEnabled && isAnalysisMode && settings.evalBarPosition === 'top' && (
+            <EvalBar
+              scoreCp={engine.scoreCp}
+              scoreMate={engine.scoreMate}
+              showText
+              orientation="horizontal"
+              position="top"
+              title={engine.bestLine ? `Depth ${engine.bestLine.depth}` : 'Eval'}
+            />
+          )}
+          <div
+            className={`board-row eval-pos-${settings.evalBarPosition}`}
+          >
+            {settings.evalBarEnabled && isAnalysisMode && settings.evalBarPosition === 'left' && (
               <EvalBar
                 scoreCp={engine.scoreCp}
                 scoreMate={engine.scoreMate}
                 showText
+                orientation="vertical"
+                position="left"
                 title={engine.bestLine ? `Depth ${engine.bestLine.depth}` : 'Eval'}
               />
             )}
@@ -613,6 +689,7 @@ function App() {
               lastMove={lastMove}
               kingInCheck={kingInCheck}
               animatingMove={animatingMove}
+              threats={threats}
               onSquareClick={handleSquareClick}
               onPieceDragStart={handlePieceDragStart}
               onDragOverSquare={() => {}}
@@ -620,7 +697,27 @@ function App() {
               onDragEnd={handleDragEnd}
               onAnimationDone={() => setAnimatingMove(null)}
             />
+            {settings.evalBarEnabled && isAnalysisMode && settings.evalBarPosition === 'right' && (
+              <EvalBar
+                scoreCp={engine.scoreCp}
+                scoreMate={engine.scoreMate}
+                showText
+                orientation="vertical"
+                position="right"
+                title={engine.bestLine ? `Depth ${engine.bestLine.depth}` : 'Eval'}
+              />
+            )}
           </div>
+          {settings.evalBarEnabled && isAnalysisMode && settings.evalBarPosition === 'bottom' && (
+            <EvalBar
+              scoreCp={engine.scoreCp}
+              scoreMate={engine.scoreMate}
+              showText
+              orientation="horizontal"
+              position="bottom"
+              title={engine.bestLine ? `Depth ${engine.bestLine.depth}` : 'Eval'}
+            />
+          )}
           {clockEnabled && (
             <ClockDisplay
               side={bottomSide}
@@ -637,13 +734,32 @@ function App() {
               disabled={
                 settings.gameMode !== 'computer' ||
                 fullHistory.length === 0 ||
-                animatingMove !== null
+                animatingMove !== null ||
+                isGameEnded
               }
               title={settings.gameMode === 'computer' ? 'Undo last move' : 'Undo only available vs Computer'}
             >
               Undo
             </button>
             <button onClick={onFlip}>Flip</button>
+            {!drawOffer && !isGameEnded && (
+              <button onClick={onOfferDraw} title="Offer a draw">
+                Draw
+              </button>
+            )}
+            {drawOffer && settings.gameMode === 'local' && (
+              <>
+                <button onClick={onAcceptDraw} className="primary-action">
+                  Accept Draw
+                </button>
+                <button onClick={onDeclineDraw}>Decline</button>
+              </>
+            )}
+            {!isGameEnded && (
+              <button onClick={onResign} className="danger-action" title="Resign the game">
+                Resign
+              </button>
+            )}
             <button onClick={() => setSettingsOpen(true)} aria-label="Open settings">
               Settings
             </button>

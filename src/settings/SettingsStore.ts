@@ -8,6 +8,7 @@ export type CoordDisplay = 'off' | 'inside' | 'outside' | 'all';
 export type GameMode = 'local' | 'computer';
 export type PlayerSide = 'w' | 'b' | 'random';
 export type EngineLevel = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+export type EvalBarPosition = 'left' | 'right' | 'top' | 'bottom';
 
 export interface Settings {
   boardThemeId: string;
@@ -26,10 +27,12 @@ export interface Settings {
   animationStyle: AnimationStyle;
   showSettingsOnStart: boolean;
   gameMode: GameMode;
-  engineLevel: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  engineLevel: EngineLevel;
   playerSide: PlayerSide;
   evalBarEnabled: boolean;
+  evalBarPosition: EvalBarPosition;
   showAnalysisLines: boolean;
+  showThreats: boolean;
 }
 
 const STORAGE_KEY = 'chess-analyzer.settings.v5';
@@ -54,7 +57,9 @@ export const DEFAULT_SETTINGS: Settings = {
   engineLevel: 4,
   playerSide: 'w',
   evalBarEnabled: true,
+  evalBarPosition: 'left',
   showAnalysisLines: false,
+  showThreats: true,
 };
 
 function loadSettings(): Settings {
@@ -172,6 +177,13 @@ export function getSettings(): Settings {
 
 export function getCommittedSettings(): Settings {
   return getCommitted();
+}
+
+/** Immediately commit a new settings value, bypassing the draft system.
+ *  Used when the App needs to start a new game with new game-mode settings
+ *  that the user has just chosen in a dialog. */
+export function setCommittedSettings(s: Settings) {
+  setCommitted(s);
 }
 
 export const ANIMATION_DURATIONS_MS: Record<AnimationSpeed, number> = {

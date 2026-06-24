@@ -444,12 +444,10 @@ body {
   grid-template-rows: repeat(8, 1fr);
   width: 100%;
   aspect-ratio: 1 / 1;
-  max-width: min(72vw, 560px);
   border-radius: 6px;
   overflow: hidden;
   user-select: none;
   position: relative;
-  margin: 0 auto;
 }
 
 .board::before {
@@ -616,6 +614,22 @@ body {
 .controls button:hover:not(:disabled) { background: #3a3d4a; }
 .controls button:active:not(:disabled) { transform: translateY(1px); }
 .controls button:disabled { opacity: 0.5; cursor: not-allowed; }
+.controls button.primary-action {
+  background: var(--accent-strong);
+  color: white;
+  border-color: var(--accent-strong);
+}
+.controls button.primary-action:hover:not(:disabled) {
+  background: var(--accent);
+}
+.controls button.danger-action {
+  background: transparent;
+  color: #ff7a7a;
+  border-color: #5a2a2a;
+}
+.controls button.danger-action:hover:not(:disabled) {
+  background: rgba(255, 80, 80, 0.1);
+}
 
 .side-panel {
   display: flex;
@@ -753,19 +767,40 @@ body {
 .board-row {
   display: flex;
   align-items: stretch;
+  gap: 0;
+  width: 100%;
+  max-width: min(72vw, 560px);
+  margin: 0 auto;
+  justify-content: center;
+}
+.board-row.eval-pos-left,
+.board-row.eval-pos-right {
   gap: 8px;
+}
+.board-row > .board {
+  flex: 1 1 auto;
 }
 
 .eval-bar {
-  width: 22px;
   background: #1a1a1a;
   border-radius: 4px;
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
   user-select: none;
   position: relative;
   border: 1px solid var(--border-clr);
+}
+.eval-bar-vertical {
+  width: 22px;
+  display: flex;
+  flex-direction: column;
+}
+.eval-bar-horizontal {
+  height: 22px;
+  width: 100%;
+  max-width: min(72vw, 560px);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: row;
 }
 .eval-bar-black {
   background: #1a1a1a;
@@ -780,13 +815,34 @@ body {
   background: #f4f4f4;
   transition: height 0.3s ease;
 }
+.eval-bar-black-h {
+  background: #1a1a1a;
+  transition: width 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  padding-left: 6px;
+}
+.eval-bar-white-h {
+  background: #f4f4f4;
+  transition: width 0.3s ease;
+  height: 100%;
+}
 .eval-label {
   font-size: 10px;
   font-weight: 700;
   font-family: ui-monospace, Consolas, monospace;
   pointer-events: none;
+  white-space: nowrap;
 }
 .eval-label-bottom { color: #f4f4f4; }
+.eval-label-inline { color: #f4f4f4; font-size: 11px; }
+
+.eval-pos-left,
+.eval-pos-right { align-self: stretch; }
+.eval-pos-top,
+.eval-pos-bottom { align-self: center; width: 100%; max-width: min(72vw, 560px); }
 
 .dirty-badge {
   background: var(--accent-strong);

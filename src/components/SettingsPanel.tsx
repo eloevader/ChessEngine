@@ -1,5 +1,5 @@
 import { useSettingsDraft } from '../settings/SettingsStore';
-import type { AnimationSpeed, AnimationStyle, SoundPack, CoordDisplay, PlayerSide, GameMode } from '../settings/SettingsStore';
+import type { AnimationSpeed, AnimationStyle, SoundPack, CoordDisplay, PlayerSide, GameMode, EvalBarPosition } from '../settings/SettingsStore';
 import { BOARD_THEMES, getTheme } from '../chess/themes';
 import { PIECE_SETS, pieceImageUrl, type PieceSetId } from '../chess/pieces';
 
@@ -46,6 +46,13 @@ const PLAYER_SIDES: { id: PlayerSide; label: string }[] = [
   { id: 'w', label: 'White' },
   { id: 'b', label: 'Black' },
   { id: 'random', label: 'Random' },
+];
+
+const EVAL_POSITIONS: { id: EvalBarPosition; label: string }[] = [
+  { id: 'left', label: 'Left' },
+  { id: 'right', label: 'Right' },
+  { id: 'top', label: 'Top' },
+  { id: 'bottom', label: 'Bottom' },
 ];
 
 export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
@@ -339,6 +346,30 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                 type="checkbox"
                 checked={draft.evalBarEnabled}
                 onChange={(e) => updateDraft({ evalBarEnabled: e.target.checked })}
+              />
+            </div>
+            {draft.evalBarEnabled && (
+              <div className="setting-row">
+                <label>Eval bar position</label>
+                <div className="seg-group">
+                  {EVAL_POSITIONS.map((p) => (
+                    <button
+                      key={p.id}
+                      className={`seg ${draft.evalBarPosition === p.id ? 'selected' : ''}`}
+                      onClick={() => updateDraft({ evalBarPosition: p.id })}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="setting-row">
+              <label>Show threat arrows</label>
+              <input
+                type="checkbox"
+                checked={draft.showThreats}
+                onChange={(e) => updateDraft({ showThreats: e.target.checked })}
               />
             </div>
             <div className="setting-row">

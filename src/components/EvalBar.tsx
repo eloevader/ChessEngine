@@ -7,6 +7,10 @@ interface EvalBarProps {
   showText?: boolean;
   /** Optional title for screen readers. */
   title?: string;
+  /** Layout orientation. */
+  orientation?: 'vertical' | 'horizontal';
+  /** Position around the board (affects which side the text label appears on). */
+  position?: 'left' | 'right' | 'top' | 'bottom';
 }
 
 /** Maps a centipawn score to a 0-1 fraction for the white-bar height.
@@ -23,7 +27,14 @@ function isValidScore(cp: number | null, mate: number | null): boolean {
   return false;
 }
 
-export function EvalBar({ scoreCp, scoreMate, showText = true, title }: EvalBarProps) {
+export function EvalBar({
+  scoreCp,
+  scoreMate,
+  showText = true,
+  title,
+  orientation = 'vertical',
+  position = 'left',
+}: EvalBarProps) {
   const hasScore = isValidScore(scoreCp, scoreMate);
 
   let fraction = 0.5;
@@ -52,12 +63,40 @@ export function EvalBar({ scoreCp, scoreMate, showText = true, title }: EvalBarP
     if (scoreCp > 0) label = '+' + label;
   }
 
+  const isHorizontal = orientation === 'horizontal';
+  // For vertical bars, the score label is always on the black side (top for white-bottom orientation).
+  // For horizontal bars, the score label is on the left edge.
+  const labelOnBlackSide = true;
+
   return (
-    <div className="eval-bar" title={title} data-empty={!hasScore ? 'true' : 'false'}>
-      <div className="eval-bar-black" style={{ height: `${(1 - fraction) * 100}%` }}>
-        {showText && <span className="eval-label eval-label-bottom">{label}</span>}
-      </div>
-      <div className="eval-bar-white" style={{ height: `${fraction * 100}%` }} />
+    <div
+      className={`eval-bar ${isHorizontal ? 'eval-bar-horizontal' : 'eval-bar-vertical'} eval-pos-${position}`}
+      title={title}
+      data-empty={!hasScore ? 'true' : 'false'}
+    >
+      {isHorizontal ? (
+        <>
+          <div
+            className="eval-bar-white-h"
+            style={{ width: `${fraction * 100}%` }}
+          />
+          <div
+            className="eval-bar-black-h"
+            style={{ width: `${(1 - fraction) * 100}%` }}
+          >
+            {showText && <span className="eval-label eval-label-inline">{label}</span>}
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="eval-bar-black" style={{ height: `${(1 - fraction) * 100}%` }}>
+            {showText && labelOnBlackSide && (
+              <span className="eval-label eval-label-bottom">{label}</span>
+            )}
+          </div>
+          <div className="eval-bar-white" style={{ height: `${fraction * 100}%` }} />
+        </>
+      )}
     </div>
   );
 }

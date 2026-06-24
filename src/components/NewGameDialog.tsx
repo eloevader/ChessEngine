@@ -28,7 +28,7 @@ const PLAYER_SIDES: { id: PlayerSide; label: string }[] = [
 ];
 
 export function NewGameDialog({ open, onStart, onCancel }: NewGameDialogProps) {
-  const { draft, updateDraft } = useSettingsDraft();
+  const { draft, updateDraft, save } = useSettingsDraft();
   const [presetIdx, setPresetIdx] = useState(2); // default 3+2
   const [min, setMin] = useState(3);
   const [sec, setSec] = useState(0);
@@ -57,12 +57,9 @@ export function NewGameDialog({ open, onStart, onCancel }: NewGameDialogProps) {
   };
 
   const onStartClick = () => {
-    // Persist the chosen mode/level/side into settings
-    updateDraft({
-      gameMode: draft.gameMode,
-      engineLevel: draft.engineLevel,
-      playerSide: draft.playerSide,
-    });
+    // Save the chosen mode/level/side into settings so other components
+    // see the new values immediately and the Settings panel reflects them.
+    save();
     onStart({
       mode: draft.gameMode,
       level: draft.gameMode === 'computer' ? draft.engineLevel : undefined,
