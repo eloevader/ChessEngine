@@ -57,6 +57,12 @@ export class GameState {
     return this.chess.history();
   }
 
+  historyVerbose(): LegalMove[] {
+    return (this.chess.history({ verbose: true }) as unknown as CJMove[]).map((m) =>
+      this.toLegalMove(m),
+    );
+  }
+
   inCheck(): boolean {
     return this.chess.inCheck();
   }

@@ -56,26 +56,75 @@ body {
   color: transparent;
 }
 
+/* ===== Layout ===== */
+.app {
+  min-height: 100vh;
+}
 .app-main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 28px;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
   align-items: start;
-  max-width: 980px;
+  max-width: 1080px;
   margin: 0 auto;
+  padding: 16px 20px 40px;
 }
 
-@media (max-width: 900px) {
-  .app-main { grid-template-columns: 1fr; }
-  .side-panel { order: 2; }
-}
-
+/* Desktop + tablet: sticky board area so it stays at the top of the viewport
+   while the user scrolls the move list. */
 .board-area {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 6px;
   min-width: 0;
+  position: sticky;
+  top: 8px;
+  align-self: start;
+}
+
+.side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  position: sticky;
+  top: 16px;
+  align-self: start;
+  padding-top: 0;
+}
+
+/* On tablets, side panel goes below the board and stacks. */
+@media (max-width: 960px) {
+  .app-main {
+    grid-template-columns: 1fr;
+    max-width: 720px;
+  }
+  .board-area {
+    position: static;
+    max-width: 600px;
+    margin: 0 auto;
+    width: 100%;
+  }
+  .side-panel {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
+  .side-panel-spacer { display: none; }
+}
+
+/* On mobile, board is full width and the side panel is a tab/toggleable drawer. */
+@media (max-width: 640px) {
+  .app-main {
+    padding: 8px 10px 24px;
+    gap: 12px;
+  }
+  .board-area {
+    max-width: 100%;
+  }
 }
 
 .status-bar {
@@ -586,17 +635,53 @@ body {
   background: var(--bg-panel);
   border: 1px solid var(--border-clr);
   border-radius: 10px;
-  padding: 12px;
+  padding: 10px 12px;
   max-height: 320px;
   overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+.move-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  position: sticky;
+  top: 0;
+  background: var(--bg-panel);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-clr);
+  z-index: 1;
 }
 .move-history h3 {
-  margin: 0 0 8px;
-  font-size: 14px;
+  margin: 0;
+  font-size: 13px;
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
+.move-nav {
+  display: flex;
+  gap: 2px;
+}
+.nav-btn {
+  background: var(--bg-elev);
+  color: var(--text);
+  border: 1px solid var(--border-clr);
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+}
+.nav-btn:hover:not(:disabled) { background: #3a3d4a; }
+.nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .move-list { display: flex; flex-direction: column; gap: 2px; }
 .move-row {
   display: grid;
@@ -619,6 +704,7 @@ body {
 }
 .move-cell:hover:not(:disabled) { background: var(--bg-elev); }
 .move-cell.active { background: var(--accent-strong); color: white; }
+.move-cell.past { color: var(--text-dim); }
 .move-cell:disabled { color: var(--text-dim); cursor: default; }
 .empty { color: var(--text-dim); font-size: 13px; padding: 6px 0; }
 

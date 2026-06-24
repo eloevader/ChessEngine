@@ -1,11 +1,14 @@
 /// <reference lib="webworker" />
 import STOCKFISH_URL from '../../public/engine/stockfish.js?url';
+import STOCKFISH_WASM_URL from '../../public/engine/stockfish.wasm?url';
 
 declare const self: DedicatedWorkerGlobalScope;
 
-// stockfish.js is a self-contained Web Worker. We load it as a sub-worker
-// and proxy messages between it and the main thread.
-const engine: Worker = new Worker(STOCKFISH_URL);
+// stockfish.js determines the wasm URL from `self.location.hash`. We need to
+// pass our wasm URL via the hash, with the format: `<wasm_url>,worker`.
+const workerURL = `${STOCKFISH_URL}#${encodeURIComponent(STOCKFISH_WASM_URL)},worker`;
+
+const engine: Worker = new Worker(workerURL);
 
 engine.onmessage = (e: MessageEvent) => {
   postMessage(e.data);

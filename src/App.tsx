@@ -96,6 +96,8 @@ function App() {
   const [captures, setCaptures] = useState<{ white: Piece[]; black: Piece[] }>({ white: [], black: [] });
   /** Ply at which we are currently viewing (default = end of game). */
   const [viewPly, setViewPly] = useState<number>(0);
+  /** Full move list (preserved when navigating so future moves aren't lost). */
+  const [fullHistory, setFullHistory] = useState<string[]>([]);
   /** Side chosen for computer opponent (resolved at game start if 'random'). */
   const [engineSide, setEngineSide] = useState<'w' | 'b' | null>(null);
   /** Whether the game has a clock (and which side is the human in computer mode). */
@@ -109,8 +111,8 @@ function App() {
   }, [fen, snapshot.inCheck, snapshot.turn]);
 
   const sanMoves = useMemo<LegalMove[]>(() => {
-    return snapshot.history.map((san) => ({ san } as LegalMove));
-  }, [snapshot.history]);
+    return fullHistory.map((san) => ({ san } as LegalMove));
+  }, [fullHistory]);
 
   const theme = getTheme(settings.boardThemeId);
   const effectiveLight = settings.customLight ?? theme.light;
@@ -162,6 +164,7 @@ function App() {
       setAnimatingMove(anim);
       setFen(game.fen());
       setViewPly((v) => v + 1);
+      setFullHistory((h) => [...h, result.san]);
 
       // Clock: add increment to the side that just moved, then switch to opponent
       if (clockEnabled) {
@@ -342,6 +345,7 @@ function App() {
     setAnimatingMove(null);
     setCaptures({ white: [], black: [] });
     setViewPly(0);
+    setFullHistory([]);
     setEngineSide(null);
     engine.clearBestMove();
     engine.stop();
@@ -360,6 +364,7 @@ function App() {
     setAnimatingMove(null);
     setCaptures({ white: [], black: [] });
     setViewPly(0);
+    setFullHistory([]);
     engine.clearBestMove();
     engine.stop();
 
@@ -390,95 +395,117 @@ function App() {
     setNewGameOpen(false);
   };
 
-  // Undo: delete the last move (and any subsequent move by the engine)
+  // Undo: only enabled in computer mode. Deletes the engine's last response
+  // (and your last move) so the human can try a different move.
   const onUndo = () => {
     if (animatingMove) return;
-    if (viewPly < snapshot.history.length) {
-      // We're viewing a past position - undo means truncate forward
-      const r = game.undo();
-      if (r) {
-        setFen(game.fen());
-        setViewPly((v) => v - 1);
-        if (r.isCapture && r.captured) {
-          setCaptures((prev) => {
-            const color = r.color === 'w' ? 'black' : 'white';
-            const arr = prev[color];
-            if (arr.length === 0) return prev;
-            return { ...prev, [color]: arr.slice(0, -1) };
-          });
-        }
-      }
-    } else {
-      // Truncate to before the last move
-      const r = game.undo();
-      if (r) {
-        setFen(game.fen());
-        setViewPly((v) => v - 1);
-        if (r.isCapture && r.captured) {
-          setCaptures((prev) => {
-            const color = r.color === 'w' ? 'black' : 'white';
-            const arr = prev[color];
-            if (arr.length === 0) return prev;
-            return { ...prev, [color]: arr.slice(0, -1) };
-          });
-        }
-        setLastMove(null);
-        engine.clearBestMove();
-        engine.stop();
-        // If computer mode, also undo the engine's response
-        if (settings.gameMode === 'computer' && engineSide !== null && game.turn() === engineSide) {
-          const r2 = game.undo();
-          if (r2) {
-            setFen(game.fen());
-            setViewPly((v) => v - 1);
-            if (r2.isCapture && r2.captured) {
-              setCaptures((prev) => {
-                const color = r2.color === 'w' ? 'black' : 'white';
-                const arr = prev[color];
-                if (arr.length === 0) return prev;
-                return { ...prev, [color]: arr.slice(0, -1) };
-              });
-            }
-          }
-        }
+    if (settings.gameMode !== 'computer') return;
+    if (fullHistory.length === 0) return;
+
+    // If we're viewing a past position, first jump back to the latest.
+    if (viewPly < fullHistory.length) {
+      jumpToPly(fullHistory.length);
+    }
+
+    // Truncate the last move (the engine's response)
+    const newHistory = fullHistory.slice(0, -1);
+    setFullHistory(newHistory);
+
+    // Rebuild game state
+    game.reset();
+    const newCaptures = { white: [] as Piece[], black: [] as Piece[] };
+    for (let i = 0; i < newHistory.length; i++) {
+      const r = game.moveSan(newHistory[i]);
+      if (r && r.isCapture && r.captured) {
+        const cp: Piece = {
+          color: r.color === 'w' ? 'b' : 'w',
+          type: r.captured as Piece['type'],
+        };
+        const key = cp.color === 'w' ? 'white' : 'black';
+        newCaptures[key].push(cp);
       }
     }
-  };
-
-  const onFlip = () => setOrientation((o) => (o === 'w' ? 'b' : 'w'));
-
-  // Jump to ply: only changes the viewing position, does NOT truncate future moves.
-  // To actually truncate, the user must press Undo.
-  const onJumpTo = (ply: number) => {
-    if (animatingMove) return;
-    const targetFen = (() => {
-      if (ply < 0) return INITIAL_FEN;
-      game.reset();
-      for (let i = 0; i <= ply && i < snapshot.history.length; i++) {
-        game.moveSan(snapshot.history[i]);
-      }
-      return game.fen();
-    })();
-    setFen(targetFen);
-    setViewPly(ply);
+    setCaptures(newCaptures);
+    setFen(game.fen());
+    setViewPly(newHistory.length);
     setLastMove(null);
-    setSelected(null);
     engine.clearBestMove();
     engine.stop();
   };
 
-  // Request engine eval when FEN or ply changes
+  const onFlip = () => setOrientation((o) => (o === 'w' ? 'b' : 'w'));
+
+  // Jump to a specific ply. Reads from fullHistory so future moves are
+  // preserved. Does NOT delete anything.
+  const jumpToPly = (ply: number) => {
+    if (animatingMove) return;
+    const history = fullHistory;
+    if (ply < 0) {
+      game.reset();
+      setFen(INITIAL_FEN);
+      setViewPly(0);
+      setLastMove(null);
+      setSelected(null);
+      return;
+    }
+    game.reset();
+    for (let i = 0; i < ply && i < history.length; i++) {
+      game.moveSan(history[i]);
+    }
+    setFen(game.fen());
+    setViewPly(ply);
+    // Show the last move of the jumped-to position for context
+    if (ply > 0) {
+      const allMoves = game.historyVerbose();
+      const m = allMoves[allMoves.length - 1];
+      if (m) {
+        setLastMove({ from: m.from as Square, to: m.to as Square });
+      } else {
+        setLastMove(null);
+      }
+    } else {
+      setLastMove(null);
+    }
+    setSelected(null);
+  };
+
+  const onJumpTo = (ply: number) => jumpToPly(ply);
+
+  const onJumpStart = () => jumpToPly(0);
+  const onJumpBack = () => jumpToPly(Math.max(0, viewPly - 1));
+  const onJumpForward = () => jumpToPly(Math.min(fullHistory.length, viewPly + 1));
+  const onJumpEnd = () => jumpToPly(fullHistory.length);
+
+  // Analysis mode = reviewing a past position OR game is finished.
+  // During live play (in computer or local mode), hide the eval bar so the
+  // player isn't tempted to use engine hints.
+  const isAnalysisMode = viewPly < fullHistory.length || snapshot.isGameOver;
+
+  // Whether the engine should be thinking right now.
+  // = reviewing past position, game over, or it's the engine's turn in computer mode.
+  const isEngineThinking =
+    isAnalysisMode ||
+    (settings.gameMode === 'computer' &&
+      engineSide !== null &&
+      viewPly === fullHistory.length &&
+      game.turn() === engineSide &&
+      !snapshot.isGameOver);
+
   useEffect(() => {
-    engine.requestEval(fen, settings.engineLevel);
+    if (isEngineThinking) {
+      engine.requestEval(fen, settings.engineLevel);
+    } else {
+      engine.stop();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fen]);
+  }, [fen, isEngineThinking]);
 
   // If we're at the latest ply, the engine is to move (computer mode) - let it think
   useEffect(() => {
     if (
       settings.gameMode === 'computer' &&
       engineSide !== null &&
-      viewPly === snapshot.history.length &&
+      viewPly === fullHistory.length &&
       game.turn() === engineSide &&
       !snapshot.isGameOver &&
       !engine.bestMove
@@ -569,7 +596,7 @@ function App() {
             />
           )}
           <div className="board-row">
-            {settings.evalBarEnabled && (
+            {settings.evalBarEnabled && isAnalysisMode && (
               <EvalBar
                 scoreCp={engine.scoreCp}
                 scoreMate={engine.scoreMate}
@@ -605,7 +632,15 @@ function App() {
           <CapturedRow captures={captures} side={bottomSide} />
           <div className="controls">
             <button onClick={() => setNewGameOpen(true)}>New Game</button>
-            <button onClick={onUndo} disabled={snapshot.history.length === 0 || animatingMove !== null}>
+            <button
+              onClick={onUndo}
+              disabled={
+                settings.gameMode !== 'computer' ||
+                fullHistory.length === 0 ||
+                animatingMove !== null
+              }
+              title={settings.gameMode === 'computer' ? 'Undo last move' : 'Undo only available vs Computer'}
+            >
               Undo
             </button>
             <button onClick={onFlip}>Flip</button>
@@ -617,10 +652,14 @@ function App() {
         <aside className="side-panel">
           <div className="side-panel-spacer" aria-hidden="true" />
           <MoveHistory
-            history={snapshot.history}
+            history={fullHistory}
             sanMoves={sanMoves}
             currentPly={viewPly - 1}
             onJumpTo={(p) => onJumpTo(p)}
+            onJumpStart={onJumpStart}
+            onJumpBack={onJumpBack}
+            onJumpForward={onJumpForward}
+            onJumpEnd={onJumpEnd}
           />
         </aside>
       </main>
