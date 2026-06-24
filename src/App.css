@@ -124,7 +124,7 @@ body {
   display: flex;
   flex-direction: column;
   background: var(--bg-panel);
-  padding: 10px;
+  padding: 12px;
   border-radius: 12px;
   border: 1px solid var(--border-clr);
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
@@ -133,8 +133,9 @@ body {
 
 .board-with-coords {
   display: grid;
-  grid-template-columns: 18px 1fr;
-  gap: 4px;
+  /* gutter is square, equal to one cell on each side */
+  grid-template-columns: var(--coord-gutter, 22px) 1fr;
+  gap: var(--coord-gap, 6px);
 }
 .board-no-coords { display: block; }
 
@@ -144,7 +145,13 @@ body {
   font-size: 11px;
   color: var(--text-dim);
 }
-.rank-coord { display: flex; align-items: center; justify-content: center; }
+.rank-coord {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 500;
+  user-select: none;
+}
 
 .board {
   display: grid;
@@ -235,6 +242,43 @@ body {
   box-sizing: border-box;
 }
 
+.coord-incell {
+  position: absolute;
+  font-size: 10px;
+  font-weight: 700;
+  pointer-events: none;
+  z-index: 2;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.coord-incell.tl {
+  top: 2px;
+  left: 3px;
+}
+.coord-incell.br {
+  bottom: 2px;
+  right: 3px;
+  font-size: 9px;
+  opacity: 0.6;
+}
+.coord-incell.on-light {
+  color: rgba(0, 0, 0, 0.55);
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5);
+}
+.coord-incell.on-dark {
+  color: rgba(255, 255, 255, 0.65);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.6);
+}
+/* When all-cells mode, place single label bottom-right faded */
+.square .coord-incell.br:only-child {
+  bottom: 2px;
+  right: 3px;
+  font-size: 9px;
+  opacity: 0.45;
+  font-weight: 600;
+}
+
 .animated-piece {
   pointer-events: none;
   display: flex;
@@ -259,16 +303,18 @@ body {
 
 .files-row {
   display: grid;
-  grid-template-columns: 18px 1fr;
-  gap: 4px;
-  margin-top: 4px;
+  grid-template-columns: var(--coord-gutter, 22px) 1fr;
+  gap: var(--coord-gap, 6px);
+  margin-top: var(--coord-gap, 6px);
 }
-.coord-spacer { width: 18px; }
+.coord-spacer { width: var(--coord-gutter, 22px); }
 .files-inner {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   font-size: 11px;
   color: var(--text-dim);
+  font-weight: 500;
+  user-select: none;
 }
 .file-coord { text-align: center; }
 

@@ -4,6 +4,7 @@ import type { PieceSetId } from '../chess/pieces';
 export type AnimationSpeed = 'slow' | 'normal' | 'fast' | 'arcade';
 export type AnimationStyle = 'slide' | 'arc';
 export type SoundPack = 'classic' | 'retro' | 'modern' | 'arcade' | 'soft';
+export type CoordDisplay = 'off' | 'inside' | 'outside' | 'all';
 
 export interface Settings {
   boardThemeId: string;
@@ -13,7 +14,7 @@ export interface Settings {
   soundEnabled: boolean;
   soundVolume: number;
   soundPack: SoundPack;
-  showCoordinates: boolean;
+  coordDisplay: CoordDisplay;
   showLegalMoves: boolean;
   highlightLastMove: boolean;
   highlightCheck: boolean;
@@ -23,7 +24,7 @@ export interface Settings {
   showSettingsOnStart: boolean;
 }
 
-const STORAGE_KEY = 'chess-analyzer.settings.v3';
+const STORAGE_KEY = 'chess-analyzer.settings.v4';
 
 export const DEFAULT_SETTINGS: Settings = {
   boardThemeId: 'classic',
@@ -33,7 +34,7 @@ export const DEFAULT_SETTINGS: Settings = {
   soundEnabled: true,
   soundVolume: 0.6,
   soundPack: 'classic',
-  showCoordinates: true,
+  coordDisplay: 'outside',
   showLegalMoves: true,
   highlightLastMove: true,
   highlightCheck: true,

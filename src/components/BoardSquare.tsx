@@ -1,7 +1,7 @@
 import type { Piece, Square } from '../chess/types';
-import { isLightSquare } from '../chess/board';
+import { isLightSquare, fileOf, rankOf } from '../chess/board';
 import { pieceImageUrl } from '../chess/pieces';
-import { useSettings } from '../settings/SettingsStore';
+import { useSettings, type CoordDisplay } from '../settings/SettingsStore';
 
 interface SquareProps {
   square: Square;
@@ -12,11 +12,51 @@ interface SquareProps {
   isLastMoveFrom: boolean;
   isLastMoveTo: boolean;
   isCheck: boolean;
+  coordDisplay: CoordDisplay;
   onSquareClick: (square: Square) => void;
   onPieceDragStart: (square: Square, piece: Piece) => void;
   onDragOverSquare: (square: Square) => void;
   onDropOnSquare: (square: Square) => void;
   onDragEnd: () => void;
+}
+
+function inCellCoords(square: Square, mode: CoordDisplay): { tl?: string; br?: string } {
+  if (mode === 'off') return {};
+  const f = fileOf(square);
+  const r = rankOf(square);
+  const isLeftCol = f === 0;
+  const isRightCol = f === 7;
+  const isBottomRow = r === 0;
+  const isTopRow = r === 7;
+  const fileLabel = String.fromCharCode(97 + f);
+  const rankLabel = String(r + 1);
+
+  if (mode === 'all') {
+    return { br: `${fileLabel}${rankLabel}` };
+  }
+
+  // 'inside' mode - Lichess style:
+  // - a-column cells: 'a' in top-left
+  // - h-column cells: 'h' in bottom-right
+  // - row 1 cells: '1' in bottom-right
+  // - row 8 cells: '8' in top-left
+  const out: { tl?: string; br?: string } = {};
+  if (isLeftCol && isBottomRow) {
+    out.tl = fileLabel;
+    out.br = rankLabel;
+  } else if (isLeftCol) {
+    out.tl = fileLabel;
+  } else if (isRightCol && isTopRow) {
+    out.tl = rankLabel;
+    out.br = fileLabel;
+  } else if (isRightCol) {
+    out.br = fileLabel;
+  } else if (isBottomRow) {
+    out.br = rankLabel;
+  } else if (isTopRow) {
+    out.tl = rankLabel;
+  }
+  return out;
 }
 
 export function BoardSquare(props: SquareProps) {
@@ -30,6 +70,7 @@ export function BoardSquare(props: SquareProps) {
     isLastMoveFrom,
     isLastMoveTo,
     isCheck,
+    coordDisplay,
     onSquareClick,
     onPieceDragStart,
     onDragOverSquare,
@@ -46,6 +87,8 @@ export function BoardSquare(props: SquareProps) {
   if (isSelected) pieceClasses.push('selected');
 
   const showLegalHint = settings.showLegalMoves && (isLegalTarget || isCaptureTarget);
+  const inCell = inCellCoords(square, coordDisplay);
+  const isLight = light;
 
   return (
     <div
@@ -62,6 +105,16 @@ export function BoardSquare(props: SquareProps) {
         onDropOnSquare(square);
       }}
     >
+      {coordDisplay !== 'off' && inCell.tl && (
+        <span className={`coord-incell tl ${isLight ? 'on-light' : 'on-dark'}`}>
+          {inCell.tl}
+        </span>
+      )}
+      {coordDisplay !== 'off' && inCell.br && (
+        <span className={`coord-incell br ${isLight ? 'on-light' : 'on-dark'}`}>
+          {inCell.br}
+        </span>
+      )}
       {piece && (
         <img
           className={pieceClasses.join(' ')}

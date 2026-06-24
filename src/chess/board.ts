@@ -15,3 +15,11 @@ export function isValidSquare(sq: string): boolean {
   const r = sq[1];
   return FILES.includes(f as (typeof FILES)[number]) && RANKS.includes(r as (typeof RANKS)[number]);
 }
+
+export function fileOf(sq: Square): number {
+  return FILES.indexOf(sq[0] as (typeof FILES)[number]);
+}
+
+export function rankOf(sq: Square): number {
+  return parseInt(sq[1], 10) - 1;
+}

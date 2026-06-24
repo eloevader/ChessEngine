@@ -1,4 +1,4 @@
-import { useSettings, type AnimationSpeed, type AnimationStyle, type SoundPack } from '../settings/SettingsStore';
+import { useSettings, type AnimationSpeed, type AnimationStyle, type SoundPack, type CoordDisplay } from '../settings/SettingsStore';
 import { BOARD_THEMES, getTheme } from '../chess/themes';
 import { PIECE_SETS, pieceImageUrl, type PieceSetId } from '../chess/pieces';
 
@@ -21,6 +21,13 @@ const SOUND_PACKS: { id: SoundPack; label: string; description: string }[] = [
   { id: 'modern', label: 'Modern', description: 'Clean sine tones, minimal' },
   { id: 'arcade', label: 'Arcade', description: 'Bouncy, game-like' },
   { id: 'soft', label: 'Soft', description: 'Gentle wood-block plucks' },
+];
+
+const COORD_MODES: { id: CoordDisplay; label: string; description: string }[] = [
+  { id: 'off', label: 'Off', description: 'No coordinates' },
+  { id: 'outside', label: 'Outside', description: 'Labels on rank/file edges' },
+  { id: 'inside', label: 'Inside', description: 'Labels inside the edge cells' },
+  { id: 'all', label: 'All', description: 'Every cell shows its square' },
 ];
 
 export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
@@ -201,12 +208,19 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
           <section className="settings-section">
             <h3>Display</h3>
             <div className="setting-row">
-              <label>Show coordinates</label>
-              <input
-                type="checkbox"
-                checked={settings.showCoordinates}
-                onChange={(e) => update({ showCoordinates: e.target.checked })}
-              />
+              <label>Coordinates</label>
+              <div className="seg-group">
+                {COORD_MODES.map((c) => (
+                  <button
+                    key={c.id}
+                    className={`seg ${settings.coordDisplay === c.id ? 'selected' : ''}`}
+                    onClick={() => update({ coordDisplay: c.id })}
+                    title={c.description}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="setting-row">
               <label>Show legal move hints</label>

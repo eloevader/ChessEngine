@@ -73,10 +73,12 @@ export function Board(props: BoardProps) {
     return out;
   }, [board, files, ranks]);
 
+  const showOutside = settings.coordDisplay === 'outside';
+
   return (
     <div className="board-frame">
-      <div className={settings.showCoordinates ? 'board-with-coords' : 'board-no-coords'}>
-        {settings.showCoordinates && (
+      <div className={showOutside ? 'board-with-coords' : 'board-no-coords'}>
+        {showOutside && (
           <div className="ranks-col">
             {ranks.map((r) => (
               <div key={r} className="coord rank-coord">
@@ -100,6 +102,7 @@ export function Board(props: BoardProps) {
               isLastMoveFrom={lastMove?.from === square}
               isLastMoveTo={lastMove?.to === square}
               isCheck={kingInCheck === square}
+              coordDisplay={settings.coordDisplay}
               onSquareClick={onSquareClick}
               onPieceDragStart={onPieceDragStart}
               onDragOverSquare={onDragOverSquare}
@@ -110,7 +113,7 @@ export function Board(props: BoardProps) {
           {animatingMove && <AnimatedPiece anim={animatingMove} onDone={onAnimationDone} />}
         </div>
       </div>
-      {settings.showCoordinates && (
+      {showOutside && (
         <div className="files-row">
           <div className="coord-spacer" />
           <div className="files-inner">
