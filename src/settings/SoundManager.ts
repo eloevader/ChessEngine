@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { LegalMove } from '../chess/GameState';
-import { getSettings, type Settings } from '../settings/SettingsStore';
+import { getSettings, type Settings, type SoundPack } from '../settings/SettingsStore';
 
 export type SoundEvent =
   | { type: 'move'; move: LegalMove }
@@ -14,16 +14,73 @@ export type SoundEvent =
   | { type: 'illegal' }
   | { type: 'lowTime' };
 
-const SOUND_FILES: Record<string, string> = {
-  move: 'sounds/move.mp3',
-  capture: 'sounds/capture.mp3',
-  check: 'sounds/check.mp3',
-  checkmate: 'sounds/checkmate.wav',
-  victory: 'sounds/victory.wav',
-  defeat: 'sounds/defeat.mp3',
-  draw: 'sounds/draw.mp3',
-  illegal: 'sounds/error.wav',
-  lowTime: 'sounds/lowtime.mp3',
+type SoundKey =
+  | 'move'
+  | 'capture'
+  | 'check'
+  | 'checkmate'
+  | 'victory'
+  | 'defeat'
+  | 'draw'
+  | 'illegal'
+  | 'lowTime';
+
+const SOUND_MAP: Record<SoundPack, Partial<Record<SoundKey, string>>> = {
+  classic: {
+    move: 'sounds/move.mp3',
+    capture: 'sounds/capture.mp3',
+    check: 'sounds/check.mp3',
+    checkmate: 'sounds/checkmate.wav',
+    victory: 'sounds/victory.wav',
+    defeat: 'sounds/defeat.mp3',
+    draw: 'sounds/draw.mp3',
+    illegal: 'sounds/error.wav',
+    lowTime: 'sounds/lowtime.mp3',
+  },
+  retro: {
+    move: 'sounds/retro-move.wav',
+    capture: 'sounds/retro-capture.wav',
+    check: 'sounds/retro-check.wav',
+    checkmate: 'sounds/retro-checkmate.wav',
+    victory: 'sounds/retro-victory.wav',
+    defeat: 'sounds/retro-defeat.wav',
+    draw: 'sounds/retro-draw.wav',
+    illegal: 'sounds/retro-error.wav',
+    lowTime: 'sounds/retro-lowtime.wav',
+  },
+  modern: {
+    move: 'sounds/modern-move.wav',
+    capture: 'sounds/modern-capture.wav',
+    check: 'sounds/modern-check.wav',
+    checkmate: 'sounds/modern-checkmate.wav',
+    victory: 'sounds/modern-victory.wav',
+    defeat: 'sounds/modern-defeat.wav',
+    draw: 'sounds/modern-draw.wav',
+    illegal: 'sounds/modern-error.wav',
+    lowTime: 'sounds/modern-lowtime.wav',
+  },
+  arcade: {
+    move: 'sounds/arcade-move.wav',
+    capture: 'sounds/arcade-capture.wav',
+    check: 'sounds/arcade-check.wav',
+    checkmate: 'sounds/arcade-checkmate.wav',
+    victory: 'sounds/arcade-victory.wav',
+    defeat: 'sounds/arcade-defeat.wav',
+    draw: 'sounds/arcade-draw.wav',
+    illegal: 'sounds/arcade-error.wav',
+    lowTime: 'sounds/arcade-lowtime.wav',
+  },
+  soft: {
+    move: 'sounds/soft-move.wav',
+    capture: 'sounds/soft-capture.wav',
+    check: 'sounds/soft-check.wav',
+    checkmate: 'sounds/soft-checkmate.wav',
+    victory: 'sounds/soft-victory.wav',
+    defeat: 'sounds/soft-defeat.wav',
+    draw: 'sounds/soft-draw.wav',
+    illegal: 'sounds/soft-error.wav',
+    lowTime: 'sounds/soft-lowtime.wav',
+  },
 };
 
 class SoundManager {
@@ -39,20 +96,22 @@ class SoundManager {
     this.settings = getSettings();
   }
 
-  private getAudio(key: string): HTMLAudioElement | null {
+  private getAudio(key: SoundKey): HTMLAudioElement | null {
     if (!this.settings.soundEnabled) return null;
-    const cached = this.cache.get(key);
-    if (cached) return cached;
-    const src = SOUND_FILES[key];
+    const pack = SOUND_MAP[this.settings.soundPack] ?? SOUND_MAP.classic;
+    const src = pack[key];
     if (!src) return null;
+    const cacheKey = `${this.settings.soundPack}:${key}`;
+    const cached = this.cache.get(cacheKey);
+    if (cached) return cached;
     const a = new Audio(src);
     a.preload = 'auto';
     a.volume = this.settings.soundVolume;
-    this.cache.set(key, a);
+    this.cache.set(cacheKey, a);
     return a;
   }
 
-  private play(key: string) {
+  private play(key: SoundKey) {
     const a = this.getAudio(key);
     if (!a) return;
     try {
@@ -71,9 +130,7 @@ class SoundManager {
 
     switch (event.type) {
       case 'move':
-        if (event.move.isCastle) this.play('move');
-        else if (event.move.isPromotion) this.play('move');
-        else this.play('move');
+        this.play('move');
         break;
       case 'capture':
         this.play('capture');
@@ -108,7 +165,7 @@ class SoundManager {
     }
   }
 
-  private scheduleSide(win: string, lose: string) {
+  private scheduleSide(win: SoundKey, lose: SoundKey) {
     setTimeout(() => this.play(win), 700);
     setTimeout(() => this.play(lose), 1500);
   }

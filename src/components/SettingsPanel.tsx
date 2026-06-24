@@ -1,4 +1,4 @@
-import { useSettings, type AnimationSpeed, type AnimationStyle } from '../settings/SettingsStore';
+import { useSettings, type AnimationSpeed, type AnimationStyle, type SoundPack } from '../settings/SettingsStore';
 import { BOARD_THEMES, getTheme } from '../chess/themes';
 import { PIECE_SETS, pieceImageUrl, type PieceSetId } from '../chess/pieces';
 
@@ -13,6 +13,14 @@ const ANIM_SPEEDS: { id: AnimationSpeed; label: string }[] = [
   { id: 'normal', label: 'Normal' },
   { id: 'fast', label: 'Fast' },
   { id: 'arcade', label: 'Arcade' },
+];
+
+const SOUND_PACKS: { id: SoundPack; label: string; description: string }[] = [
+  { id: 'classic', label: 'Classic', description: 'Lichess-style natural sounds' },
+  { id: 'retro', label: 'Retro 8-bit', description: 'Chiptune beeps, arcade feel' },
+  { id: 'modern', label: 'Modern', description: 'Clean sine tones, minimal' },
+  { id: 'arcade', label: 'Arcade', description: 'Bouncy, game-like' },
+  { id: 'soft', label: 'Soft', description: 'Gentle wood-block plucks' },
 ];
 
 export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
@@ -140,6 +148,21 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                 onChange={(e) => update({ soundVolume: parseFloat(e.target.value) })}
               />
               <span className="setting-value">{Math.round(settings.soundVolume * 100)}%</span>
+            </div>
+            <div className="setting-row">
+              <label>Sound pack</label>
+              <div className="seg-group vertical">
+                {SOUND_PACKS.map((p) => (
+                  <button
+                    key={p.id}
+                    className={`seg ${settings.soundPack === p.id ? 'selected' : ''}`}
+                    onClick={() => update({ soundPack: p.id })}
+                    title={p.description}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </section>
 

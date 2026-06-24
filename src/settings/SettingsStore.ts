@@ -3,6 +3,7 @@ import type { PieceSetId } from '../chess/pieces';
 
 export type AnimationSpeed = 'slow' | 'normal' | 'fast' | 'arcade';
 export type AnimationStyle = 'slide' | 'arc';
+export type SoundPack = 'classic' | 'retro' | 'modern' | 'arcade' | 'soft';
 
 export interface Settings {
   boardThemeId: string;
@@ -11,6 +12,7 @@ export interface Settings {
   pieceSet: PieceSetId;
   soundEnabled: boolean;
   soundVolume: number;
+  soundPack: SoundPack;
   showCoordinates: boolean;
   showLegalMoves: boolean;
   highlightLastMove: boolean;
@@ -21,7 +23,7 @@ export interface Settings {
   showSettingsOnStart: boolean;
 }
 
-const STORAGE_KEY = 'chess-analyzer.settings.v2';
+const STORAGE_KEY = 'chess-analyzer.settings.v3';
 
 export const DEFAULT_SETTINGS: Settings = {
   boardThemeId: 'classic',
@@ -30,6 +32,7 @@ export const DEFAULT_SETTINGS: Settings = {
   pieceSet: 'cburnett',
   soundEnabled: true,
   soundVolume: 0.6,
+  soundPack: 'classic',
   showCoordinates: true,
   showLegalMoves: true,
   highlightLastMove: true,

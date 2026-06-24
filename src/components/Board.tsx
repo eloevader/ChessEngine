@@ -64,18 +64,18 @@ export function Board(props: BoardProps) {
       for (const f of files) {
         const fileIdx = FILES.indexOf(f as (typeof FILES)[number]);
         const rankIdx = parseInt(r, 10) - 1;
-        const row = orientation === 'w' ? 8 - 1 - rankIdx : rankIdx;
+        const row = 7 - rankIdx;
         const col = fileIdx;
         const piece = board[row]?.[col] ?? null;
         out.push({ square: (f + r) as Square, fileIdx, rankIdx, piece });
       }
     }
     return out;
-  }, [board, orientation, files, ranks]);
+  }, [board, files, ranks]);
 
   return (
     <div className="board-frame">
-      <div className="board-with-coords">
+      <div className={settings.showCoordinates ? 'board-with-coords' : 'board-no-coords'}>
         {settings.showCoordinates && (
           <div className="ranks-col">
             {ranks.map((r) => (

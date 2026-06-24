@@ -3,12 +3,12 @@ import { Board } from './components/Board';
 import { MoveHistory } from './components/MoveHistory';
 import { PromotionDialog } from './components/PromotionDialog';
 import { SettingsPanel } from './components/SettingsPanel';
+import { CapturedRow } from './components/CapturedPieces';
 import { GameState, type LegalMove } from './chess/GameState';
 import type { Piece, Square } from './chess/types';
 import { useSettings, ANIMATION_DURATIONS_MS } from './settings/SettingsStore';
 import { useSound } from './settings/SoundManager';
-import { getTheme } from './chess/themes';
-import { themeToCss } from './chess/themes';
+import { getTheme, themeToCss } from './chess/themes';
 import './App.css';
 
 type PendingPromotion = {
@@ -73,6 +73,7 @@ function App() {
   const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion>(null);
   const [animatingMove, setAnimatingMove] = useState<AnimatingMove>(null);
   const [settingsOpen, setSettingsOpen] = useState(settings.showSettingsOnStart);
+  const [captures, setCaptures] = useState<{ white: Piece[]; black: Piece[] }>({ white: [], black: [] });
 
   const snapshot = game.snapshot();
   const board = useMemo(() => buildBoard(fen), [fen]);
@@ -120,6 +121,18 @@ function App() {
       setLastMove({ from: result.from as Square, to: result.to as Square });
       setAnimatingMove(anim);
       setFen(game.fen());
+
+      if (result.captured) {
+        const capturedPiece: Piece = {
+          color: result.color === 'w' ? 'b' : 'w',
+          type: result.captured as Piece['type'],
+        };
+        setCaptures((prev) => {
+          const key = capturedPiece.color === 'w' ? 'white' : 'black';
+          return { ...prev, [key]: [...prev[key], capturedPiece] };
+        });
+      }
+      void captured;
 
       if (result.isCapture) emit({ type: 'capture', move: result });
       else emit({ type: 'move', move: result });
@@ -271,6 +284,7 @@ function App() {
     setCaptureTargets(new Set());
     setLastMove(null);
     setAnimatingMove(null);
+    setCaptures({ white: [], black: [] });
   };
 
   const onUndo = () => {
@@ -279,6 +293,14 @@ function App() {
     if (result) {
       setFen(game.fen());
       setLastMove(null);
+      if (result.isCapture && result.captured) {
+        setCaptures((prev) => {
+          const color = result.color === 'w' ? 'black' : 'white';
+          const arr = prev[color];
+          if (arr.length === 0) return prev;
+          return { ...prev, [color]: arr.slice(0, -1) };
+        });
+      }
     }
   };
 
@@ -287,12 +309,22 @@ function App() {
   const onJumpTo = (ply: number) => {
     if (animatingMove) return;
     game.reset();
+    const captureState: { white: Piece[]; black: Piece[] } = { white: [], black: [] };
     for (let i = 0; i <= ply && i < snapshot.history.length; i++) {
-      game.moveSan(snapshot.history[i]);
+      const r = game.moveSan(snapshot.history[i]);
+      if (r && r.isCapture && r.captured) {
+        const capturedColor = r.color === 'w' ? 'b' : 'w';
+        const capturedPiece: Piece = {
+          color: capturedColor,
+          type: r.captured as Piece['type'],
+        };
+        captureState[capturedColor === 'w' ? 'white' : 'black'].push(capturedPiece);
+      }
     }
     setFen(game.fen());
     setLastMove(null);
     setSelected(null);
+    setCaptures(captureState);
   };
 
   useEffect(() => {
@@ -315,17 +347,23 @@ function App() {
     return `${snapshot.turn === 'w' ? 'White' : 'Black'} to move`;
   })();
 
+  // The side currently at the bottom of the visual board
+  const bottomSide: 'w' | 'b' = orientation;
+
   return (
     <div className="app">
-      <header className="app-header">
-        <h1>Chess Analyzer</h1>
-        <p className="subtitle">Free · Stockfish · Lichess</p>
-      </header>
       <main className="app-main">
         <div className="board-area">
+          <header className="app-header">
+            <h1>Chess Analyzer</h1>
+          </header>
           <div className="status-bar" data-status={snapshot.inCheck ? 'check' : ''}>
             {statusText}
           </div>
+          <CapturedRow
+            captures={captures}
+            side={bottomSide === 'w' ? 'b' : 'w'}
+          />
           <Board
             board={board}
             orientation={orientation}
@@ -342,6 +380,7 @@ function App() {
             onDragEnd={handleDragEnd}
             onAnimationDone={() => setAnimatingMove(null)}
           />
+          <CapturedRow captures={captures} side={bottomSide} />
           <div className="controls">
             <button onClick={onReset}>New Game</button>
             <button onClick={onUndo} disabled={snapshot.history.length === 0 || animatingMove !== null}>
@@ -360,15 +399,6 @@ function App() {
             currentPly={snapshot.history.length - 1}
             onJumpTo={onJumpTo}
           />
-          <div className="fen-box">
-            <h4>FEN</h4>
-            <code>{snapshot.fen}</code>
-          </div>
-          <div className="hint">
-            <p>Click a piece, then a highlighted square. Drag &amp; drop also works.</p>
-            <p>Castling, en passant, and promotion are all supported.</p>
-            <p>Tap <strong>Settings</strong> to change board, pieces, sound, animation.</p>
-          </div>
         </aside>
       </main>
       {pendingPromotion && (

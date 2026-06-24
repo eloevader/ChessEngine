@@ -75,6 +75,15 @@ export function BoardSquare(props: SquareProps) {
             }
             e.dataTransfer.setData('text/plain', square);
             e.dataTransfer.effectAllowed = 'move';
+            const img = e.currentTarget;
+            const rect = img.getBoundingClientRect();
+            const offsetX = e.clientX - rect.left;
+            const offsetY = e.clientY - rect.top;
+            try {
+              e.dataTransfer.setDragImage(img, offsetX, offsetY);
+            } catch {
+              /* some browsers reject it, fall back to default */
+            }
             onPieceDragStart(square, piece);
           }}
           onDragEnd={onDragEnd}

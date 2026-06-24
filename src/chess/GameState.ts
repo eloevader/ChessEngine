@@ -6,8 +6,10 @@ export interface LegalMove {
   to: Square;
   flags: string;
   piece: string;
+  captured?: string;
   promotion?: string;
   san: string;
+  color: 'w' | 'b';
   isCapture: boolean;
   isCastle: boolean;
   isEnPassant: boolean;
@@ -165,8 +167,10 @@ export class GameState {
       to: m.to,
       flags: m.flags,
       piece: m.piece,
+      captured: m.captured,
       promotion: m.promotion,
       san: m.san,
+      color: m.color,
       isCapture: m.flags.includes('c') || m.flags.includes('e'),
       isCastle: m.flags.includes('k') || m.flags.includes('q'),
       isEnPassant: m.flags.includes('e'),
