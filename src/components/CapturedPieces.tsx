@@ -12,7 +12,7 @@ interface CapturedRowProps {
 }
 
 export function CapturedRow({ captures, side }: CapturedRowProps) {
-  const [settings] = useSettings();
+  const settings = useSettings();
 
   // side is the player at the BOTTOM of the board. The bottom row shows
   // pieces captured BY that player (i.e. opponent's pieces they've taken).

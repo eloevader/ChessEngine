@@ -1,4 +1,5 @@
-import { useSettings, type AnimationSpeed, type AnimationStyle, type SoundPack, type CoordDisplay } from '../settings/SettingsStore';
+import { useSettingsDraft } from '../settings/SettingsStore';
+import type { AnimationSpeed, AnimationStyle, SoundPack, CoordDisplay, PlayerSide, GameMode } from '../settings/SettingsStore';
 import { BOARD_THEMES, getTheme } from '../chess/themes';
 import { PIECE_SETS, pieceImageUrl, type PieceSetId } from '../chess/pieces';
 
@@ -30,26 +31,101 @@ const COORD_MODES: { id: CoordDisplay; label: string; description: string }[] = 
   { id: 'all', label: 'All', description: 'Every cell shows its square' },
 ];
 
+const ENGINE_LEVELS: { id: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8; label: string; hint: string }[] = [
+  { id: 1, label: '1', hint: '~400 · Beginner' },
+  { id: 2, label: '2', hint: '~800 · Easy' },
+  { id: 3, label: '3', hint: '~1100 · Casual' },
+  { id: 4, label: '4', hint: '~1400 · Intermediate' },
+  { id: 5, label: '5', hint: '~1700 · Club' },
+  { id: 6, label: '6', hint: '~2000 · Strong' },
+  { id: 7, label: '7', hint: '~2200 · Expert' },
+  { id: 8, label: '8', hint: '~2400+ · Master' },
+];
+
+const PLAYER_SIDES: { id: PlayerSide; label: string }[] = [
+  { id: 'w', label: 'White' },
+  { id: 'b', label: 'Black' },
+  { id: 'random', label: 'Random' },
+];
+
 export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
-  const [settings, update, reset] = useSettings();
+  const { draft, updateDraft, save, discard, reset, isDirty } = useSettingsDraft();
 
   if (!open) return null;
 
-  const theme = getTheme(settings.boardThemeId);
-  const light = settings.customLight ?? theme.light;
-  const dark = settings.customDark ?? theme.dark;
+  const theme = getTheme(draft.boardThemeId);
+  const light = draft.customLight ?? theme.light;
+  const dark = draft.customDark ?? theme.dark;
+
+  const handleClose = () => {
+    if (isDirty) discard();
+    onClose();
+  };
 
   return (
-    <div className="settings-backdrop" onClick={onClose}>
+    <div className="settings-backdrop" onClick={handleClose}>
       <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
         <div className="settings-header">
           <h2>Settings</h2>
-          <button className="icon-btn" onClick={onClose} aria-label="Close settings">
+          {isDirty && <span className="dirty-badge">Unsaved</span>}
+          <button className="icon-btn" onClick={handleClose} aria-label="Close settings">
             {'\u2715'}
           </button>
         </div>
 
         <div className="settings-body">
+          <section className="settings-section">
+            <h3>Game Mode</h3>
+            <div className="setting-row">
+              <label>Mode</label>
+              <div className="seg-group">
+                {(['local', 'computer'] as GameMode[]).map((m) => (
+                  <button
+                    key={m}
+                    className={`seg ${draft.gameMode === m ? 'selected' : ''}`}
+                    onClick={() => updateDraft({ gameMode: m })}
+                  >
+                    {m === 'local' ? '2 Players' : 'vs Computer'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {draft.gameMode === 'computer' && (
+              <>
+                <div className="setting-row">
+                  <label>Engine Level</label>
+                  <div className="level-row">
+                    {ENGINE_LEVELS.map((l) => (
+                      <button
+                        key={l.id}
+                        className={`level-btn ${draft.engineLevel === l.id ? 'selected' : ''}`}
+                        onClick={() => updateDraft({ engineLevel: l.id })}
+                        title={l.hint}
+                      >
+                        {l.label}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="setting-value">{ENGINE_LEVELS[draft.engineLevel - 1].hint}</span>
+                </div>
+                <div className="setting-row">
+                  <label>Play as</label>
+                  <div className="seg-group">
+                    {PLAYER_SIDES.map((s) => (
+                      <button
+                        key={s.id}
+                        className={`seg ${draft.playerSide === s.id ? 'selected' : ''}`}
+                        onClick={() => updateDraft({ playerSide: s.id })}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </section>
+
           <section className="settings-section">
             <h3>Board</h3>
             <div className="setting-row">
@@ -58,8 +134,8 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                 {BOARD_THEMES.map((t) => (
                   <button
                     key={t.id}
-                    className={`theme-chip ${settings.boardThemeId === t.id ? 'selected' : ''}`}
-                    onClick={() => update({ boardThemeId: t.id, customLight: null, customDark: null })}
+                    className={`theme-chip ${draft.boardThemeId === t.id ? 'selected' : ''}`}
+                    onClick={() => updateDraft({ boardThemeId: t.id, customLight: null, customDark: null })}
                     title={t.name}
                   >
                     <span
@@ -89,7 +165,7 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                   <input
                     type="color"
                     value={light}
-                    onChange={(e) => update({ customLight: e.target.value })}
+                    onChange={(e) => updateDraft({ customLight: e.target.value })}
                   />
                 </div>
                 <div className="color-input">
@@ -97,11 +173,14 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                   <input
                     type="color"
                     value={dark}
-                    onChange={(e) => update({ customDark: e.target.value })}
+                    onChange={(e) => updateDraft({ customDark: e.target.value })}
                   />
                 </div>
-                {(settings.customLight || settings.customDark) && (
-                  <button className="text-btn" onClick={() => update({ customLight: null, customDark: null })}>
+                {(draft.customLight || draft.customDark) && (
+                  <button
+                    className="text-btn"
+                    onClick={() => updateDraft({ customLight: null, customDark: null })}
+                  >
                     Reset to theme
                   </button>
                 )}
@@ -117,8 +196,8 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                 return (
                   <button
                     key={id}
-                    className={`piece-chip ${settings.pieceSet === id ? 'selected' : ''}`}
-                    onClick={() => update({ pieceSet: id })}
+                    className={`piece-chip ${draft.pieceSet === id ? 'selected' : ''}`}
+                    onClick={() => updateDraft({ pieceSet: id })}
                     title={meta.description}
                   >
                     <span className="piece-preview">
@@ -139,8 +218,8 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
               <label>Enable sounds</label>
               <input
                 type="checkbox"
-                checked={settings.soundEnabled}
-                onChange={(e) => update({ soundEnabled: e.target.checked })}
+                checked={draft.soundEnabled}
+                onChange={(e) => updateDraft({ soundEnabled: e.target.checked })}
               />
             </div>
             <div className="setting-row">
@@ -150,11 +229,11 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                 min="0"
                 max="1"
                 step="0.05"
-                value={settings.soundVolume}
-                disabled={!settings.soundEnabled}
-                onChange={(e) => update({ soundVolume: parseFloat(e.target.value) })}
+                value={draft.soundVolume}
+                disabled={!draft.soundEnabled}
+                onChange={(e) => updateDraft({ soundVolume: parseFloat(e.target.value) })}
               />
-              <span className="setting-value">{Math.round(settings.soundVolume * 100)}%</span>
+              <span className="setting-value">{Math.round(draft.soundVolume * 100)}%</span>
             </div>
             <div className="setting-row">
               <label>Sound pack</label>
@@ -162,8 +241,8 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                 {SOUND_PACKS.map((p) => (
                   <button
                     key={p.id}
-                    className={`seg ${settings.soundPack === p.id ? 'selected' : ''}`}
-                    onClick={() => update({ soundPack: p.id })}
+                    className={`seg ${draft.soundPack === p.id ? 'selected' : ''}`}
+                    onClick={() => updateDraft({ soundPack: p.id })}
                     title={p.description}
                   >
                     {p.label}
@@ -181,8 +260,8 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                 {ANIM_SPEEDS.map((s) => (
                   <button
                     key={s.id}
-                    className={`seg ${settings.animationSpeed === s.id ? 'selected' : ''}`}
-                    onClick={() => update({ animationSpeed: s.id })}
+                    className={`seg ${draft.animationSpeed === s.id ? 'selected' : ''}`}
+                    onClick={() => updateDraft({ animationSpeed: s.id })}
                   >
                     {s.label}
                   </button>
@@ -195,8 +274,8 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                 {(['slide', 'arc'] as AnimationStyle[]).map((s) => (
                   <button
                     key={s}
-                    className={`seg ${settings.animationStyle === s ? 'selected' : ''}`}
-                    onClick={() => update({ animationStyle: s })}
+                    className={`seg ${draft.animationStyle === s ? 'selected' : ''}`}
+                    onClick={() => updateDraft({ animationStyle: s })}
                   >
                     {s === 'slide' ? 'Flat slide' : 'Arc'}
                   </button>
@@ -213,8 +292,8 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                 {COORD_MODES.map((c) => (
                   <button
                     key={c.id}
-                    className={`seg ${settings.coordDisplay === c.id ? 'selected' : ''}`}
-                    onClick={() => update({ coordDisplay: c.id })}
+                    className={`seg ${draft.coordDisplay === c.id ? 'selected' : ''}`}
+                    onClick={() => updateDraft({ coordDisplay: c.id })}
                     title={c.description}
                   >
                     {c.label}
@@ -226,41 +305,74 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
               <label>Show legal move hints</label>
               <input
                 type="checkbox"
-                checked={settings.showLegalMoves}
-                onChange={(e) => update({ showLegalMoves: e.target.checked })}
+                checked={draft.showLegalMoves}
+                onChange={(e) => updateDraft({ showLegalMoves: e.target.checked })}
               />
             </div>
             <div className="setting-row">
               <label>Highlight last move</label>
               <input
                 type="checkbox"
-                checked={settings.highlightLastMove}
-                onChange={(e) => update({ highlightLastMove: e.target.checked })}
+                checked={draft.highlightLastMove}
+                onChange={(e) => updateDraft({ highlightLastMove: e.target.checked })}
               />
             </div>
             <div className="setting-row">
               <label>Highlight check</label>
               <input
                 type="checkbox"
-                checked={settings.highlightCheck}
-                onChange={(e) => update({ highlightCheck: e.target.checked })}
+                checked={draft.highlightCheck}
+                onChange={(e) => updateDraft({ highlightCheck: e.target.checked })}
               />
             </div>
             <div className="setting-row">
               <label>Flip board after my move</label>
               <input
                 type="checkbox"
-                checked={settings.flipAfterMove}
-                onChange={(e) => update({ flipAfterMove: e.target.checked })}
+                checked={draft.flipAfterMove}
+                onChange={(e) => updateDraft({ flipAfterMove: e.target.checked })}
+              />
+            </div>
+            <div className="setting-row">
+              <label>Show eval bar</label>
+              <input
+                type="checkbox"
+                checked={draft.evalBarEnabled}
+                onChange={(e) => updateDraft({ evalBarEnabled: e.target.checked })}
+              />
+            </div>
+            <div className="setting-row">
+              <label>Show best-line arrows</label>
+              <input
+                type="checkbox"
+                checked={draft.showAnalysisLines}
+                onChange={(e) => updateDraft({ showAnalysisLines: e.target.checked })}
               />
             </div>
           </section>
 
           <div className="settings-footer">
             <button className="danger-btn" onClick={reset}>
-              Reset all to defaults
+              Reset to defaults
             </button>
           </div>
+        </div>
+
+        <div className="settings-savebar">
+          <button
+            className="text-btn"
+            onClick={discard}
+            disabled={!isDirty}
+          >
+            Discard
+          </button>
+          <button
+            className="primary-btn"
+            onClick={save}
+            disabled={!isDirty}
+          >
+            Save
+          </button>
         </div>
       </div>
     </div>

@@ -60,7 +60,7 @@ function inCellCoords(square: Square, mode: CoordDisplay): { tl?: string; br?: s
 }
 
 export function BoardSquare(props: SquareProps) {
-  const [settings] = useSettings();
+  const settings = useSettings();
   const {
     square,
     piece,

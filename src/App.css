@@ -434,7 +434,102 @@ body {
 }
 .promotion-label { font-size: 12px; color: var(--text-dim); }
 
-/* ===== Settings panel ===== */
+.board-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.eval-bar {
+  width: 22px;
+  background: #1a1a1a;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  user-select: none;
+  position: relative;
+  border: 1px solid var(--border-clr);
+}
+.eval-bar-black {
+  background: #1a1a1a;
+  position: relative;
+  transition: height 0.3s ease;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 6px;
+}
+.eval-bar-white {
+  background: #f4f4f4;
+  transition: height 0.3s ease;
+}
+.eval-label {
+  font-size: 10px;
+  font-weight: 700;
+  font-family: ui-monospace, Consolas, monospace;
+  pointer-events: none;
+}
+.eval-label-bottom { color: #f4f4f4; }
+
+.dirty-badge {
+  background: var(--accent-strong);
+  color: white;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+  margin-right: auto;
+  margin-left: 8px;
+}
+
+.settings-savebar {
+  position: sticky;
+  bottom: 0;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border-clr);
+  padding: 12px 20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.primary-btn {
+  background: var(--accent-strong);
+  color: white;
+  border: none;
+  padding: 8px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.15s, transform 0.05s;
+}
+.primary-btn:hover:not(:disabled) { background: var(--accent); }
+.primary-btn:active:not(:disabled) { transform: translateY(1px); }
+.primary-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.level-row {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+.level-btn {
+  flex: 1 1 auto;
+  min-width: 30px;
+  background: var(--bg-elev);
+  color: var(--text);
+  border: 1px solid var(--border-clr);
+  border-radius: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.15s, border 0.15s;
+}
+.level-btn:hover { background: #3a3d4a; }
+.level-btn.selected { background: var(--accent-strong); color: white; border-color: var(--accent-strong); }
+
 
 .settings-backdrop {
   position: fixed;

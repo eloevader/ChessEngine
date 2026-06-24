@@ -5,6 +5,8 @@ export type AnimationSpeed = 'slow' | 'normal' | 'fast' | 'arcade';
 export type AnimationStyle = 'slide' | 'arc';
 export type SoundPack = 'classic' | 'retro' | 'modern' | 'arcade' | 'soft';
 export type CoordDisplay = 'off' | 'inside' | 'outside' | 'all';
+export type GameMode = 'local' | 'computer';
+export type PlayerSide = 'w' | 'b' | 'random';
 
 export interface Settings {
   boardThemeId: string;
@@ -22,9 +24,14 @@ export interface Settings {
   animationSpeed: AnimationSpeed;
   animationStyle: AnimationStyle;
   showSettingsOnStart: boolean;
+  gameMode: GameMode;
+  engineLevel: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  playerSide: PlayerSide;
+  evalBarEnabled: boolean;
+  showAnalysisLines: boolean;
 }
 
-const STORAGE_KEY = 'chess-analyzer.settings.v4';
+const STORAGE_KEY = 'chess-analyzer.settings.v5';
 
 export const DEFAULT_SETTINGS: Settings = {
   boardThemeId: 'classic',
@@ -42,6 +49,11 @@ export const DEFAULT_SETTINGS: Settings = {
   animationSpeed: 'normal',
   animationStyle: 'slide',
   showSettingsOnStart: false,
+  gameMode: 'local',
+  engineLevel: 4,
+  playerSide: 'w',
+  evalBarEnabled: true,
+  showAnalysisLines: false,
 };
 
 function loadSettings(): Settings {
@@ -64,24 +76,26 @@ function saveSettings(s: Settings) {
   }
 }
 
+let committedState: Settings | null = null;
 let listeners: Array<(s: Settings) => void> = [];
-let currentState: Settings | null = null;
 
-function getState(): Settings {
-  if (currentState === null) currentState = loadSettings();
-  return currentState;
+function getCommitted(): Settings {
+  if (committedState === null) committedState = loadSettings();
+  return committedState;
 }
 
-function setState(updater: (s: Settings) => Settings) {
-  const next = updater(getState());
-  currentState = next;
+function setCommitted(next: Settings) {
+  committedState = next;
   saveSettings(next);
   listeners.forEach((l) => l(next));
 }
 
-export function useSettings(): [Settings, (patch: Partial<Settings>) => void, () => void] {
-  const [s, setLocal] = useState<Settings>(getState());
-
+/**
+ * Hook used by the rest of the app to read the active (committed) settings.
+ * Does NOT respond to staged-but-unsaved changes in the panel.
+ */
+export function useSettings(): Settings {
+  const [s, setLocal] = useState<Settings>(getCommitted());
   useEffect(() => {
     const listener = (next: Settings) => setLocal(next);
     listeners.push(listener);
@@ -89,20 +103,74 @@ export function useSettings(): [Settings, (patch: Partial<Settings>) => void, ()
       listeners = listeners.filter((l) => l !== listener);
     };
   }, []);
+  return s;
+}
 
-  const update = useCallback((patch: Partial<Settings>) => {
-    setState((s) => ({ ...s, ...patch }));
+/**
+ * Hook for the Settings panel. Manages a staged draft + Save / Discard.
+ * Returns the live draft (not yet committed), updateDraft, save, discard, reset.
+ */
+export function useSettingsDraft(): {
+  draft: Settings;
+  setDraft: (next: Settings) => void;
+  updateDraft: (patch: Partial<Settings>) => void;
+  save: () => void;
+  discard: () => void;
+  reset: () => void;
+  isDirty: boolean;
+} {
+  const [draft, setDraftInternal] = useState<Settings>(() => getCommitted());
+  const [isDirty, setIsDirty] = useState(false);
+
+  useEffect(() => {
+    const listener = (next: Settings) => {
+      // When committed state changes from elsewhere (e.g. reset), refresh draft
+      if (!isDirty) setDraftInternal(next);
+    };
+    listeners.push(listener);
+    return () => {
+      listeners = listeners.filter((l) => l !== listener);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDirty]);
+
+  const setDraft = useCallback((next: Settings) => {
+    setDraftInternal(next);
+    setIsDirty(true);
+  }, []);
+
+  const updateDraft = useCallback((patch: Partial<Settings>) => {
+    setDraftInternal((s) => ({ ...s, ...patch }));
+    setIsDirty(true);
+  }, []);
+
+  const save = useCallback(() => {
+    setDraftInternal((current) => {
+      setCommitted(current);
+      return current;
+    });
+    setIsDirty(false);
+  }, []);
+
+  const discard = useCallback(() => {
+    setDraftInternal(getCommitted());
+    setIsDirty(false);
   }, []);
 
   const reset = useCallback(() => {
-    setState(() => DEFAULT_SETTINGS);
+    setDraftInternal(DEFAULT_SETTINGS);
+    setIsDirty(true);
   }, []);
 
-  return [s, update, reset];
+  return { draft, setDraft, updateDraft, save, discard, reset, isDirty };
 }
 
 export function getSettings(): Settings {
-  return getState();
+  return getCommitted();
+}
+
+export function getCommittedSettings(): Settings {
+  return getCommitted();
 }
 
 export const ANIMATION_DURATIONS_MS: Record<AnimationSpeed, number> = {

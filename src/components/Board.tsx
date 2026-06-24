@@ -31,7 +31,7 @@ interface DisplaySquare {
 }
 
 export function Board(props: BoardProps) {
-  const [settings] = useSettings();
+  const settings = useSettings();
   const {
     board,
     orientation,
@@ -135,7 +135,7 @@ interface AnimatedPieceProps {
 }
 
 function AnimatedPiece({ anim, onDone }: AnimatedPieceProps) {
-  const [settings] = useSettings();
+  const settings = useSettings();
   const duration = ANIMATION_DURATIONS_MS[settings.animationSpeed];
   const [geom, setGeom] = useState<{ fromX: number; fromY: number; dx: number; dy: number; size: number } | null>(null);
 
