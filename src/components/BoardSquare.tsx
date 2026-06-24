@@ -1,7 +1,6 @@
-import type { CSSProperties } from 'react';
 import type { Piece, Square } from '../chess/types';
 import { isLightSquare } from '../chess/board';
-import { pieceGlyph } from '../chess/pieces';
+import { pieceImageUrl } from '../chess/pieces';
 import { useSettings } from '../settings/SettingsStore';
 
 interface SquareProps {
@@ -48,10 +47,6 @@ export function BoardSquare(props: SquareProps) {
 
   const showLegalHint = settings.showLegalMoves && (isLegalTarget || isCaptureTarget);
 
-  const pieceStyle: CSSProperties = piece
-    ? { color: piece.color === 'w' ? settings.pieceColorW : settings.pieceColorB }
-    : {};
-
   return (
     <div
       className={classes.join(' ')}
@@ -68,9 +63,10 @@ export function BoardSquare(props: SquareProps) {
       }}
     >
       {piece && (
-        <div
+        <img
           className={pieceClasses.join(' ')}
-          style={pieceStyle}
+          src={pieceImageUrl(settings.pieceSet, piece.color, piece.type)}
+          alt={`${piece.color === 'w' ? 'White' : 'Black'} ${piece.type}`}
           draggable
           onDragStart={(e) => {
             if (!piece) {
@@ -82,9 +78,7 @@ export function BoardSquare(props: SquareProps) {
             onPieceDragStart(square, piece);
           }}
           onDragEnd={onDragEnd}
-        >
-          {pieceGlyph(settings.pieceSet, piece.color, piece.type)}
-        </div>
+        />
       )}
       {showLegalHint && (
         <div

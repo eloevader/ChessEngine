@@ -1,13 +1,13 @@
 import { useSettings, type AnimationSpeed, type AnimationStyle } from '../settings/SettingsStore';
 import { BOARD_THEMES, getTheme } from '../chess/themes';
-import { PIECE_SET_LABELS, PIECE_SET_COLORS, type PieceSetId } from '../chess/pieces';
+import { PIECE_SETS, pieceImageUrl, type PieceSetId } from '../chess/pieces';
 
 interface SettingsPanelProps {
   open: boolean;
   onClose: () => void;
 }
 
-const PIECE_SETS: PieceSetId[] = ['outline', 'solid', 'classic', 'merida', 'alpha'];
+const PIECE_SET_IDS: PieceSetId[] = PIECE_SETS.map((p) => p.id);
 const ANIM_SPEEDS: { id: AnimationSpeed; label: string }[] = [
   { id: 'slow', label: 'Slow' },
   { id: 'normal', label: 'Normal' },
@@ -23,7 +23,6 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
   const theme = getTheme(settings.boardThemeId);
   const light = settings.customLight ?? theme.light;
   const dark = settings.customDark ?? theme.dark;
-  const pieceColors = PIECE_SET_COLORS[settings.pieceSet];
 
   return (
     <div className="settings-backdrop" onClick={onClose}>
@@ -31,7 +30,7 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
         <div className="settings-header">
           <h2>Settings</h2>
           <button className="icon-btn" onClick={onClose} aria-label="Close settings">
-            \u2715
+            {'\u2715'}
           </button>
         </div>
 
@@ -46,10 +45,21 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                     key={t.id}
                     className={`theme-chip ${settings.boardThemeId === t.id ? 'selected' : ''}`}
                     onClick={() => update({ boardThemeId: t.id, customLight: null, customDark: null })}
+                    title={t.name}
                   >
-                    <span className="theme-swatch">
-                      <span style={{ background: t.light }} />
-                      <span style={{ background: t.dark }} />
+                    <span
+                      className="theme-swatch"
+                      style={{
+                        backgroundImage: t.imageUrl ? `url('${t.imageUrl}')` : undefined,
+                        backgroundSize: 'cover',
+                      }}
+                    >
+                      {!t.imageUrl && (
+                        <>
+                          <span style={{ background: t.light }} />
+                          <span style={{ background: t.dark }} />
+                        </>
+                      )}
                     </span>
                     <span className="theme-name">{t.name}</span>
                   </button>
@@ -86,54 +96,25 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
 
           <section className="settings-section">
             <h3>Pieces</h3>
-            <div className="setting-row">
-              <label>Style</label>
-              <div className="seg-group">
-                {PIECE_SETS.map((id) => (
+            <div className="piece-grid">
+              {PIECE_SET_IDS.map((id) => {
+                const meta = PIECE_SETS.find((p) => p.id === id)!;
+                return (
                   <button
                     key={id}
-                    className={`seg ${settings.pieceSet === id ? 'selected' : ''}`}
-                    onClick={() =>
-                      update({
-                        pieceSet: id,
-                        pieceColorW: PIECE_SET_COLORS[id].w,
-                        pieceColorB: PIECE_SET_COLORS[id].b,
-                      })
-                    }
+                    className={`piece-chip ${settings.pieceSet === id ? 'selected' : ''}`}
+                    onClick={() => update({ pieceSet: id })}
+                    title={meta.description}
                   >
-                    {PIECE_SET_LABELS[id]}
+                    <span className="piece-preview">
+                      <img src={pieceImageUrl(id, 'w', 'k')} alt="" />
+                      <img src={pieceImageUrl(id, 'w', 'q')} alt="" />
+                      <img src={pieceImageUrl(id, 'b', 'k')} alt="" />
+                    </span>
+                    <span className="piece-name">{meta.label}</span>
                   </button>
-                ))}
-              </div>
-            </div>
-            <div className="setting-row">
-              <label>Piece colors</label>
-              <div className="color-row">
-                <div className="color-input">
-                  <span>White</span>
-                  <input
-                    type="color"
-                    value={settings.pieceColorW}
-                    onChange={(e) => update({ pieceColorW: e.target.value })}
-                  />
-                </div>
-                <div className="color-input">
-                  <span>Black</span>
-                  <input
-                    type="color"
-                    value={settings.pieceColorB}
-                    onChange={(e) => update({ pieceColorB: e.target.value })}
-                  />
-                </div>
-                <button
-                  className="text-btn"
-                  onClick={() =>
-                    update({ pieceColorW: pieceColors.w, pieceColorB: pieceColors.b })
-                  }
-                >
-                  Reset
-                </button>
-              </div>
+                );
+              })}
             </div>
           </section>
 

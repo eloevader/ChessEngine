@@ -9,8 +9,6 @@ export interface Settings {
   customLight: string | null;
   customDark: string | null;
   pieceSet: PieceSetId;
-  pieceColorW: string;
-  pieceColorB: string;
   soundEnabled: boolean;
   soundVolume: number;
   showCoordinates: boolean;
@@ -23,15 +21,13 @@ export interface Settings {
   showSettingsOnStart: boolean;
 }
 
-const STORAGE_KEY = 'chess-analyzer.settings.v1';
+const STORAGE_KEY = 'chess-analyzer.settings.v2';
 
 export const DEFAULT_SETTINGS: Settings = {
   boardThemeId: 'classic',
   customLight: null,
   customDark: null,
-  pieceSet: 'outline',
-  pieceColorW: '#ffffff',
-  pieceColorB: '#1a1a1a',
+  pieceSet: 'cburnett',
   soundEnabled: true,
   soundVolume: 0.6,
   showCoordinates: true,

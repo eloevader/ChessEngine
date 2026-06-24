@@ -4,7 +4,7 @@ import { BoardSquare } from './BoardSquare';
 import { FILES, RANKS } from '../chess/board';
 import type { Square, Piece } from '../chess/types';
 import { useSettings, ANIMATION_DURATIONS_MS } from '../settings/SettingsStore';
-import { pieceGlyph } from '../chess/pieces';
+import { pieceImageUrl } from '../chess/pieces';
 
 interface BoardProps {
   board: (Piece | null)[][];
@@ -179,11 +179,8 @@ function AnimatedPiece({ anim, onDone }: AnimatedPieceProps) {
   const innerStyle: CSSProperties = {
     width: '100%',
     height: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: anim.piece.color === 'w' ? settings.pieceColorW : settings.pieceColorB,
-    textShadow: '0 2px 4px rgba(0,0,0,0.35)',
+    display: 'block',
+    pointerEvents: 'none',
     animationDuration: `${duration}ms`,
     animationFillMode: 'forwards',
     animationTimingFunction: 'cubic-bezier(0.4, 0.0, 0.2, 1)',
@@ -191,15 +188,16 @@ function AnimatedPiece({ anim, onDone }: AnimatedPieceProps) {
     ['--dx' as string]: `${geom.dx}px`,
     ['--dy' as string]: `${geom.dy}px`,
     ['--arc-lift' as string]: settings.animationSpeed === 'arcade' ? '60px' : '24px',
-    fontSize: 'inherit',
-    lineHeight: 1,
   };
 
   return (
     <div style={wrapperStyle}>
-      <div style={innerStyle}>
-        {pieceGlyph(settings.pieceSet, anim.piece.color, anim.piece.type)}
-      </div>
+      <img
+        src={pieceImageUrl(settings.pieceSet, anim.piece.color, anim.piece.type)}
+        alt=""
+        style={innerStyle}
+        draggable={false}
+      />
     </div>
   );
 }
