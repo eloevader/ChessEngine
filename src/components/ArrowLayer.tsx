@@ -69,10 +69,8 @@ export function ArrowLayer({ arrows, orientation, preview }: ArrowLayerProps) {
 
   for (const a of arrows) {
     const key = `${a.from}->${a.to}`;
-    // Note: for mutual-attack pairs, we want BOTH curved arrows rendered
-    // (one from each side), so we do NOT dedup by reverse key here. The
-    // tracker gives each its own `pair: 'A' | 'B'`, so the keys differ.
-    if (seen.has(key) && !a.pair) continue;
+    const reverseKey = `${a.to}->${a.from}`;
+    if (seen.has(key) || seen.has(reverseKey)) continue;
     seen.add(key);
 
     const from = squareCenter(a.from, cell, orientation);
@@ -97,29 +95,9 @@ export function ArrowLayer({ arrows, orientation, preview }: ArrowLayerProps) {
     const isKnightShape = (fileDelta === 1 && rankDelta === 2) || (fileDelta === 2 && rankDelta === 1);
     const pieceKind = isKnightShape ? 'knight' : 'other';
 
-    // For mutual attacks, the arrow curves to one side. Offset the
-    // control point perpendicular to the line by ~15° worth of cell.
-    let path: string;
-    if (a.pair) {
-      // Curved arrow using a quadratic Bezier. Side A curves to the
-      // "left" of the direction, side B curves to the "right" of the
-      // direction (i.e., they fan out in opposite directions).
-      const sign = a.pair === 'A' ? 1 : -1;
-      // Perpendicular unit vector (left of direction = (-uy, ux)).
-      const perpX = -uy * sign;
-      const perpY = ux * sign;
-      // Offset distance: ~0.35 cell. Big enough to be visible, small
-      // enough to keep the arrow close to the line.
-      const offset = cell * 0.35;
-      const midX = (from.x + adjustedTo.x) / 2 + perpX * offset;
-      const midY = (from.y + adjustedTo.y) / 2 + perpY * offset;
-      path = `M ${from.x} ${from.y} Q ${midX} ${midY} ${adjustedTo.x} ${adjustedTo.y}`;
-    } else {
-      path = buildPath(from, adjustedTo, pieceKind);
-    }
-
+    const path = buildPath(from, adjustedTo, pieceKind);
     const color = ARROW_COLORS[a.color];
-    const opacity = a.auto ? 0.78 : 0.85;
+    const opacity = a.auto ? 0.85 : 0.9;
     const weightMul = a.weight === 'thick' ? 1.35 : a.weight === 'thin' ? 0.7 : 1;
     const stroke = cell * 0.16 * weightMul;
     const arrowId = `arrowhead-${a.color}-${key}`;

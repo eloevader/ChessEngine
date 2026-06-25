@@ -837,11 +837,10 @@ function App() {
                 return (
                   <div key={i} className="attack-line">
                     <span className={`attack-side attack-side-${d.attackerColor}`}>{side}</span>
-                    <span className="attack-piece">{"\u265E "}{pieceName}</span>
+                    <span className="attack-piece">{pieceName}</span>
                     <span className="attack-square">on {d.attackerSquare}</span>
-                    <span className="attack-verb">is attacking</span>
-                    <span className={`attack-side attack-side-${d.attackerColor === 'w' ? 'b' : 'w'}`}>{opp}</span>
-                    <span className="attack-piece">{"\u265F "}{targetName}</span>
+                    <span className="attack-verb">attacks</span>
+                    <span className="attack-piece attack-piece-target">{opp} {targetName}</span>
                     <span className="attack-square">on {d.targetSquare}</span>
                   </div>
                 );

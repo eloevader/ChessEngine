@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import type { Square } from '../chess/types';
 import { GameState } from './GameState';
 
-// ---------- Attack patterns (geometry only, no check/pin awareness) ----------
+// ---------- Attack patterns (pure geometry) ----------
 
 const KNIGHT_MOVES: [number, number][] = [
   [2, 1], [1, 2], [-1, 2], [-2, 1],
@@ -41,13 +41,11 @@ type Board = (Piece | null)[][];
 
 // ---------- Public types ----------
 
-/** The two move-time arrow colors. */
+/** Arrow colors. The tracker only ever uses 'white' (for White's attacks)
+ *  or 'black' (for Black's attacks) — but the type keeps the full
+ *  palette for the user-drawn arrow tools. */
 export type ArrowColor = 'white' | 'black' | 'green' | 'red' | 'yellow' | 'blue' | 'purple';
 
-/** A single arrow. `from` and `to` are square names. `attackerColor`
- *  indicates which side drew the arrow (used for the "vice-versa"
- *  coloring rule: White's attack on Black is blue, Black's attack on
- *  White is red). */
 export interface Arrow {
   from: Square;
   to: Square;
@@ -56,27 +54,10 @@ export interface Arrow {
   dashed?: boolean;
   /** True for arrows auto-drawn by the live attack tracker. */
   auto?: boolean;
-  /** For mutual attacks, side A or B of the offset pair. */
-  pair?: 'A' | 'B';
-  /** Index into a list of "target descriptions" for the UI panel. */
-  descIndex?: number;
 }
-
-// ---------- Color presets (RGB so we can vary opacity) ----------
-
-export const ARROW_COLORS: Record<ArrowColor, string> = {
-  white: '255, 255, 255',
-  black: '40, 40, 40',
-  green: '157, 196, 85',
-  red: '222, 80, 80',
-  yellow: '234, 204, 65',
-  blue: '85, 152, 222',
-  purple: '168, 85, 222',
-};
 
 /** "White's [piece] on [square] attacks Black's [piece] on [square]." */
 export interface AttackDescription {
-  /** Whose attack is this. */
   attackerColor: 'w' | 'b';
   attackerSquare: Square;
   attackerType: string;
@@ -89,15 +70,24 @@ export interface LiveAttackResult {
   descriptions: AttackDescription[];
 }
 
-// ---------- Geometry: every square a piece on (col, row) attacks ----------
+// ---------- Color presets ----------
 
-/** Returns the set of squares containing an enemy piece that the piece
- *  on `from` physically attacks. Sliding pieces stop at the first piece
+export const ARROW_COLORS: Record<ArrowColor, string> = {
+  white: '255, 255, 255',
+  black: '40, 40, 40',
+  green: '157, 196, 85',
+  red: '222, 80, 80',
+  yellow: '234, 204, 65',
+  blue: '85, 152, 222',
+  purple: '168, 85, 222',
+};
+
+// ---------- Pure geometry: every square a piece on (col, row) attacks ----------
+
+/** Returns the squares containing an enemy piece that the piece on
+ *  `from` physically attacks. Sliding pieces stop at the first piece
  *  in any direction. Pins / checks / legal-move validity are ignored. */
-function enemySquaresAttackedBy(
-  board: Board,
-  from: Square,
-): Square[] {
+function enemySquaresAttackedBy(board: Board, from: Square): Square[] {
   const { f, r } = squareToCoords(from);
   const col = f;
   const row = 7 - r;
@@ -148,20 +138,20 @@ function enemySquaresAttackedBy(
   return out;
 }
 
-// ---------- Live attack tracker ----------
+// ---------- Live attack tracker (the ONLY rule) ----------
 
-/** Compute the "live attack" arrows for the piece that just moved.
+/** After a move, compute the arrows from the piece that just moved to
+ *  each enemy piece it attacks.
  *
- *  Rules (per the spec):
- *   1. Only the moved piece is considered. Other pieces' attacks are
- *      ignored.
- *   2. Only squares containing an enemy piece produce arrows. Empty
- *      squares are ignored.
- *   3. White attacking Black → blue. Black attacking White → red.
- *   4. If a target also attacks the moved piece back, draw two
- *      slightly-curved arrows (offset ±15°). The arrow from White to
- *      Black curves one way, the arrow from Black to White curves the
- *      other. */
+ *  Per the spec:
+ *   1. Only the piece on `movedSquare` is considered.
+ *   2. Only squares containing an ENEMY piece produce an arrow.
+ *   3. Empty squares and friendly pieces are ignored.
+ *   4. We never check whether the enemy attacks back, whether the
+ *      target is defended, whether anyone is in check, etc. — pure
+ *      geometry.
+ *   5. White's attacks are blue, Black's attacks are red.
+ *   6. Multiple targets: one straight arrow per target. */
 export function computeLiveAttacks(
   fen: string,
   movedSquare: Square | null,
@@ -178,12 +168,9 @@ export function computeLiveAttacks(
   const attacker = board[row]?.[col] ?? null;
   if (!attacker) return { arrows: [], descriptions: [] };
 
-  // Squares (containing an enemy piece) the active attacker hits.
   const enemySqs = enemySquaresAttackedBy(board, movedSquare);
   if (enemySqs.length === 0) return { arrows: [], descriptions: [] };
 
-  // Build the description list (one per enemy target the moved piece
-  // attacks). The UI panel reads these.
   const descriptions: AttackDescription[] = [];
   for (const t of enemySqs) {
     const tc = squareToCoords(t);
@@ -200,46 +187,13 @@ export function computeLiveAttacks(
     });
   }
 
-  // Build the arrows. Check each target: if the target also attacks the
-  // moved piece, we have a mutual / "tension" pair → emit two curved
-  // arrows (one each way) instead of a single straight one.
-  const arrows: Arrow[] = [];
-  for (let i = 0; i < descriptions.length; i++) {
-    const d = descriptions[i];
-    // Does the target attack the attacker back?
-    const back = enemySquaresAttackedBy(board, d.targetSquare);
-    if (back.includes(movedSquare)) {
-      // Mutual: two curved arrows, A and B.
-      arrows.push({
-        from: movedSquare,
-        to: d.targetSquare,
-        color: d.attackerColor === 'w' ? 'blue' : 'red',
-        weight: 'normal',
-        pair: 'A',
-        auto: true,
-        descIndex: i,
-      });
-      arrows.push({
-        from: d.targetSquare,
-        to: movedSquare,
-        color: d.attackerColor === 'w' ? 'red' : 'blue',
-        weight: 'normal',
-        pair: 'B',
-        auto: true,
-        descIndex: i,
-      });
-    } else {
-      // One-way attack: single straight arrow.
-      arrows.push({
-        from: movedSquare,
-        to: d.targetSquare,
-        color: d.attackerColor === 'w' ? 'blue' : 'red',
-        weight: 'normal',
-        auto: true,
-        descIndex: i,
-      });
-    }
-  }
+  const arrowColor: ArrowColor = attacker.color === 'w' ? 'blue' : 'red';
+  const arrows: Arrow[] = descriptions.map((d) => ({
+    from: d.attackerSquare,
+    to: d.targetSquare,
+    color: arrowColor,
+    auto: true,
+  }));
 
   return { arrows, descriptions };
 }
