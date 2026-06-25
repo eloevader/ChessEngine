@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { Square } from '../chess/types';
-import { GameState } from '../chess/GameState';
+import { GameState } from './GameState';
 
 export interface Threat {
   from: Square;
@@ -9,34 +9,25 @@ export interface Threat {
   attacker: 'w' | 'b';
 }
 
-const PIECE_ATTACKS: Record<string, [number, number][]> = {
-  p: [
-    [1, 1],
-    [-1, 1],
-  ],
-  n: [
-    [2, 1], [1, 2], [-1, 2], [-2, 1],
-    [-2, -1], [-1, -2], [1, -2], [2, -1],
-  ],
-  b: [
-    [1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [6, 6], [7, 7],
-    [-1, 1], [-2, 2], [-3, 3], [-4, 4], [-5, 5], [-6, 6], [-7, 7],
-    [1, -1], [2, -2], [3, -3], [4, -4], [5, -5], [6, -6], [7, -7],
-    [-1, -1], [-2, -2], [-3, -3], [-4, -4], [-5, -5], [-6, -6], [-7, -7],
-  ],
-  r: [
-    [1, 0], [2, 0], [3, 0], [4, 0], [5, 0], [6, 0], [7, 0],
-    [-1, 0], [-2, 0], [-3, 0], [-4, 0], [-5, 0], [-6, 0], [-7, 0],
-    [0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 6], [0, 7],
-    [0, -1], [0, -2], [0, -3], [0, -4], [0, -5], [0, -6], [0, -7],
-  ],
-  q: [], // filled below
-  k: [
-    [1, 0], [-1, 0], [0, 1], [0, -1],
-    [1, 1], [1, -1], [-1, 1], [-1, -1],
-  ],
-};
-PIECE_ATTACKS.q = [...PIECE_ATTACKS.b, ...PIECE_ATTACKS.r];
+// Attack patterns: [fileDelta, rankDelta] where rankDelta is +1 for white
+// (moving up the board) and -1 for black (moving down the board).
+const KNIGHT_MOVES: [number, number][] = [
+  [2, 1], [1, 2], [-1, 2], [-2, 1],
+  [-2, -1], [-1, -2], [1, -2], [2, -1],
+];
+
+const BISHOP_DIRS: [number, number][] = [
+  [1, 1], [-1, 1], [1, -1], [-1, -1],
+];
+
+const ROOK_DIRS: [number, number][] = [
+  [1, 0], [-1, 0], [0, 1], [0, -1],
+];
+
+const KING_MOVES: [number, number][] = [
+  [1, 0], [-1, 0], [0, 1], [0, -1],
+  [1, 1], [1, -1], [-1, 1], [-1, -1],
+];
 
 const SLIDING = new Set(['b', 'r', 'q']);
 
@@ -49,40 +40,73 @@ function squareAt(fileIdx: number, rankIdx: number): Square {
 }
 
 /** Computes attack arrows for the current position.
- *  Each arrow goes from an attacking piece to the square it threatens.
- *  Restricts to the side that's about to move so the board isn't flooded
- *  with hundreds of arrows. */
+ *  Only shows threats from the specified side to avoid cluttering the board. */
 export function useThreats(
   fen: string,
   showThreats: boolean,
-  attackerFilter: 'w' | 'b' = 'b',
+  attackerColor: 'w' | 'b',
 ): Threat[] {
   return useMemo(() => {
     if (!showThreats) return [];
+
     const game = new GameState(fen);
-    const board = (game as any).chess.board() as Array<Array<{ type: string; color: 'w' | 'b' } | null>>;
+    // board() is 8x8 with board[0] = rank 8 (top of board in standard view)
+    const board = (game as unknown as { chess: { board: () => Array<Array<{ type: string; color: 'w' | 'b' } | null>> } })
+      .chess.board();
+
+    // Pawn attack direction depends on color
+    const pawnDir = attackerColor === 'w' ? 1 : -1;
+    const pawnAttacks: [number, number][] = [[-1, pawnDir], [1, pawnDir]];
+
     const threats: Threat[] = [];
 
     for (let r = 0; r < 8; r++) {
       for (let c = 0; c < 8; c++) {
         const piece = board[r][c];
-        if (!piece || piece.color !== attackerFilter) continue;
-        const fromSquare = squareAt(c, r);
+        if (!piece || piece.color !== attackerColor) continue;
 
-        const moves = PIECE_ATTACKS[piece.type] ?? [];
-        for (const [df, dr] of moves) {
-          if (!SLIDING.has(piece.type)) {
+        const fromSquare = squareAt(c, r);
+        let dirs: [number, number][] = [];
+
+        switch (piece.type) {
+          case 'p':
+            dirs = pawnAttacks;
+            break;
+          case 'n':
+            dirs = KNIGHT_MOVES;
+            break;
+          case 'b':
+            dirs = BISHOP_DIRS;
+            break;
+          case 'r':
+            dirs = ROOK_DIRS;
+            break;
+          case 'q':
+            dirs = [...BISHOP_DIRS, ...ROOK_DIRS];
+            break;
+          case 'k':
+            dirs = KING_MOVES;
+            break;
+          default:
+            continue;
+        }
+
+        const isSliding = SLIDING.has(piece.type);
+
+        for (const [df, dr] of dirs) {
+          if (!isSliding) {
             const tf = c + df;
             const tr = r + dr;
             if (!inBounds(tf, tr)) continue;
             threats.push({ from: fromSquare, to: squareAt(tf, tr), attacker: piece.color });
             continue;
           }
+          // Sliding pieces: walk until blocked or off board
           let tf = c + df;
           let tr = r + dr;
           while (inBounds(tf, tr)) {
             threats.push({ from: fromSquare, to: squareAt(tf, tr), attacker: piece.color });
-            if (board[tr][tf]) break;
+            if (board[tr][tf]) break; // blocked by any piece (own or enemy)
             tf += df;
             tr += dr;
           }
@@ -90,5 +114,5 @@ export function useThreats(
       }
     }
     return threats;
-  }, [fen, showThreats, attackerFilter]);
+  }, [fen, showThreats, attackerColor]);
 }

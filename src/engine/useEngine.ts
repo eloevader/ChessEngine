@@ -42,6 +42,17 @@ export function useEngine(): UseEngineReturn {
     };
   }, []);
 
+  // Safety timeout: if the engine doesn't respond within 15 seconds, clear
+  // the bestMove so the UI doesn't get stuck waiting.
+  useEffect(() => {
+    if (!bestMove) return;
+    const t = setTimeout(() => {
+      // If bestMove is still set after 15s, something went wrong; clear it
+      setBestMove(null);
+    }, 15000);
+    return () => clearTimeout(t);
+  }, [bestMove]);
+
   const ensureEngine = async (): Promise<StockfishEngine> => {
     if (engineRef.current) return engineRef.current;
     setStatus('loading');
@@ -92,13 +103,14 @@ export function useEngine(): UseEngineReturn {
         const cloud = await fetchLichessEval(fen);
         if (cloud && cloud.pvs && cloud.pvs.length > 0) {
           const pv = cloud.pvs[0];
+          const pvMoves = pv.moves.split(' ').filter(Boolean);
           setBestLine({
             multipv: 1,
             depth: cloud.depth,
             seldepth: cloud.depth,
             scoreCp: pv.cp,
             scoreMate: pv.mate,
-            pv: pv.moves.split(' ').filter(Boolean),
+            pv: pvMoves,
             nps: 0,
             timeMs: 0,
             nodes: cloud.knodes * 1000,
@@ -109,6 +121,11 @@ export function useEngine(): UseEngineReturn {
           } else {
             setScoreCp(pv.cp);
             setScoreMate(null);
+          }
+          // If we got a move from the cloud, also set it as the best move
+          // so the computer can play immediately without waiting for Stockfish
+          if (pvMoves.length > 0) {
+            setBestMove(pvMoves[0]);
           }
           // Also start Stockfish for deeper analysis
           void startEngineEval(fen, level);

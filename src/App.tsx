@@ -138,9 +138,9 @@ function App() {
   const [reviewing, setReviewing] = useState(false);
 
   // -------- Derived state --------
-  // Show threats for the side that's about to move (the side that can attack)
-  const threats = useThreats(fen, settings.showThreats, game.turn());
   const snapshot = game.snapshot();
+  // Show threats for the side that's about to move
+  const threats = useThreats(fen, settings.showThreats, snapshot.turn);
   const board = useMemo(() => buildBoard(fen), [fen]);
   const kingInCheck = useMemo(
     () => (snapshot.inCheck ? findKingSquare(fen, snapshot.turn) : null),
@@ -224,7 +224,7 @@ function App() {
     if (
       settings.gameMode === 'computer' &&
       engineSide !== null &&
-      game.turn() === engineSide
+      snapshot.turn === engineSide
     ) {
       return false;
     }
@@ -521,7 +521,9 @@ function App() {
     settings.gameMode === 'computer' &&
     engineSide !== null &&
     viewPly === fullHistory.length &&
-    game.turn() === engineSide;
+    snapshot.turn === engineSide &&
+    !isGameEnded &&
+    !gameEndReason;
   const isEngineThinking =
     settings.gameMode === 'analysis' ||
     reviewing ||
@@ -533,8 +535,7 @@ function App() {
     } else {
       engine.stop();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fen, isEngineThinking]);
+  }, [fen, isEngineThinking, engine, settings.engineLevel]);
 
   // Apply engine's best move
   useEffect(() => {
@@ -542,7 +543,9 @@ function App() {
       engine.bestMove &&
       settings.gameMode === 'computer' &&
       engineSide !== null &&
-      game.turn() === engineSide
+      snapshot.turn === engineSide &&
+      !isGameEnded &&
+      !gameEndReason
     ) {
       const m = engine.bestMove;
       engine.clearBestMove();
@@ -551,8 +554,7 @@ function App() {
       const promo = m.length > 4 ? (m[4] as 'q' | 'r' | 'b' | 'n') : undefined;
       tryMove(from, to, promo);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [engine.bestMove]);
+  }, [engine.bestMove, settings.gameMode, engineSide, isGameEnded, gameEndReason, snapshot.turn, tryMove]);
 
   // -------- Status text --------
   const showEvalBar = settings.evalBarEnabled && isEngineThinking;
@@ -697,6 +699,38 @@ function App() {
               <button onClick={() => setReviewing(false)}>Back to result</button>
             </div>
           )}
+          {/* Game actions (Draw/Resign) — only in play modes, separate from main controls */}
+          {isPlayMode(settings.gameMode) && !isGameEnded && (
+            <div className="game-actions">
+              {!drawOffer && canOfferDraw && (
+                <button onClick={onOfferDraw} title="Offer a draw" className="game-action-btn">
+                  🤝 Draw
+                </button>
+              )}
+              {drawOffer && settings.gameMode === 'local' && (
+                <>
+                  <span className="draw-offer-label">
+                    {drawOffer === 'w' ? 'White' : 'Black'} offers draw
+                  </span>
+                  <button onClick={onAcceptDraw} className="primary-action game-action-btn">
+                    Accept
+                  </button>
+                  <button onClick={onDeclineDraw} className="game-action-btn">
+                    Decline
+                  </button>
+                </>
+              )}
+              {canResign && (
+                <button
+                  onClick={onResign}
+                  className="danger-action game-action-btn"
+                  title="Resign the game"
+                >
+                  🏳 Resign
+                </button>
+              )}
+            </div>
+          )}
           <div className="controls">
             <button onClick={() => setNewGameOpen(true)}>New Game</button>
             <button
@@ -716,24 +750,6 @@ function App() {
               Undo
             </button>
             <button onClick={onFlip}>Flip</button>
-            {canOfferDraw && !drawOffer && !isGameEnded && (
-              <button onClick={onOfferDraw} title="Offer a draw">
-                Draw
-              </button>
-            )}
-            {canOfferDraw && drawOffer && settings.gameMode === 'local' && (
-              <>
-                <button onClick={onAcceptDraw} className="primary-action">
-                  Accept
-                </button>
-                <button onClick={onDeclineDraw}>Decline</button>
-              </>
-            )}
-            {canResign && !isGameEnded && (
-              <button onClick={onResign} className="danger-action" title="Resign the game">
-                Resign
-              </button>
-            )}
             <button onClick={() => setSettingsOpen(true)} aria-label="Open settings">
               Settings
             </button>

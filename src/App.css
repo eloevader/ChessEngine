@@ -623,6 +623,43 @@ body {
 }
 .post-game-actions button:hover { filter: brightness(1.1); }
 
+/* Game actions (Draw/Resign) — shown only in play modes, above main controls */
+.game-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 0;
+  flex-wrap: wrap;
+}
+.game-action-btn {
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-clr);
+  background: var(--bg-elev);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.game-action-btn:hover { background: #3a3d4a; }
+.game-action-btn.primary-action {
+  background: var(--accent-strong);
+  color: white;
+  border-color: var(--accent-strong);
+}
+.game-action-btn.danger-action {
+  background: transparent;
+  color: #ff7a7a;
+  border-color: #5a2a2a;
+}
+.game-action-btn.danger-action:hover { background: rgba(255, 80, 80, 0.1); }
+.draw-offer-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
 .controls {
   display: flex;
   gap: 8px;
