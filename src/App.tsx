@@ -167,7 +167,12 @@ function App() {
   const showThreatsNow =
     settings.showThreats &&
     (settings.gameMode === 'analysis' || reviewing);
-  const liveAttacks = useLiveAttacks(fen, showThreatsNow, lastMove?.to ?? null);
+  const liveAttacks = useLiveAttacks(
+    fen,
+    showThreatsNow,
+    lastMove?.to ?? null,
+    settings.threatScope,
+  );
   const threatArrows: Arrow[] = liveAttacks.arrows;
   const attackDescriptions: AttackDescription[] = liveAttacks.descriptions;
   const allArrows = useMemo(() => [...threatArrows, ...arrows], [threatArrows, arrows]);

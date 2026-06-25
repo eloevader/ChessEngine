@@ -303,6 +303,27 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                 onChange={(e) => updateDraft({ showThreats: e.target.checked })}
               />
             </div>
+            {draft.showThreats && (
+              <div className="setting-row">
+                <label>Threat scope</label>
+                <div className="seg-group">
+                  <button
+                    className={`seg ${draft.threatScope === 'lastMove' ? 'selected' : ''}`}
+                    onClick={() => updateDraft({ threatScope: 'lastMove' })}
+                    title="Only the piece that just moved"
+                  >
+                    Last move
+                  </button>
+                  <button
+                    className={`seg ${draft.threatScope === 'board' ? 'selected' : ''}`}
+                    onClick={() => updateDraft({ threatScope: 'board' })}
+                    title="Every attack by either side, on every move"
+                  >
+                    Full board
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="setting-row">
               <label>Show best-line arrows</label>
               <input

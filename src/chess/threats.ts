@@ -143,6 +143,71 @@ function enemySquaresAttackedBy(board: Board, from: Square): Square[] {
   return out;
 }
 
+// ---------- Threat compute helpers ----------
+
+interface ComputeContext {
+  board: Board;
+  /** Filter: which pieces to consider. If undefined, all pieces. */
+  onlyColor?: 'w' | 'b';
+  /** Optional: which piece (by square) is the only attacker. Used for
+   *  the 'lastMove' scope. */
+  onlySquare?: Square;
+}
+
+function buildThreatsFrom(
+  ctx: ComputeContext,
+  movedSquare: Square | null,
+): LiveAttackResult {
+  const { board, onlyColor, onlySquare } = ctx;
+  const descriptions: AttackDescription[] = [];
+  const seen = new Set<string>(); // dedupe "attacker -> target" pairs
+
+  // chess.js's board() is board[0] = rank 8, board[7] = rank 1.
+  // We need to convert (row, col) to a square name: rank = 8 - row.
+  for (let row = 0; row < 8; row++) {
+    for (let c = 0; c < 8; c++) {
+      const p = board[row]?.[c] ?? null;
+      if (!p) continue;
+      if (onlyColor && p.color !== onlyColor) continue;
+      const fromSq = squareAt(c, 7 - row);
+      if (onlySquare && fromSq !== onlySquare) continue;
+      const enemySqs = enemySquaresAttackedBy(board, fromSq);
+      for (const t of enemySqs) {
+        const key = `${fromSq}->${t}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const tc = squareToCoords(t);
+        const trow = 7 - tc.r;
+        const tcol = tc.f;
+        const tgt = board[trow]?.[tcol] ?? null;
+        if (!tgt) continue;
+        descriptions.push({
+          attackerColor: p.color,
+          attackerSquare: fromSq,
+          attackerType: p.type,
+          targetSquare: t,
+          targetType: tgt.type,
+        });
+      }
+    }
+  }
+
+  const arrowColor: ArrowColor = movedSquare
+    ? ((ctx.onlyColor ?? 'w') === 'w' ? 'blue' : 'red')
+    : 'green';
+  const arrows: Arrow[] = descriptions.map((d) => ({
+    from: d.attackerSquare,
+    to: d.targetSquare,
+    color: d.attackerColor === 'w' ? 'blue' : 'red',
+    auto: true,
+  }));
+
+  // Suppress unused-var warning on arrowColor (kept for clarity / future).
+  void arrowColor;
+
+  return { arrows, descriptions };
+}
+
 // ---------- Live attack tracker (the ONLY rule) ----------
 
 /** After a move, compute the arrows from the piece that just moved to
@@ -165,42 +230,18 @@ export function computeLiveAttacks(
   const game = new GameState(fen);
   const board = (game as unknown as { chess: { board: () => Board } })
     .chess.board();
+  return buildThreatsFrom({ board, onlySquare: movedSquare }, movedSquare);
+}
 
-  // The piece on `movedSquare` is the active attacker.
-  const { f, r } = squareToCoords(movedSquare);
-  const row = 7 - r;
-  const col = f;
-  const attacker = board[row]?.[col] ?? null;
-  if (!attacker) return { arrows: [], descriptions: [] };
-
-  const enemySqs = enemySquaresAttackedBy(board, movedSquare);
-  if (enemySqs.length === 0) return { arrows: [], descriptions: [] };
-
-  const descriptions: AttackDescription[] = [];
-  for (const t of enemySqs) {
-    const tc = squareToCoords(t);
-    const trow = 7 - tc.r;
-    const tcol = tc.f;
-    const tgt = board[trow]?.[tcol] ?? null;
-    if (!tgt) continue;
-    descriptions.push({
-      attackerColor: attacker.color,
-      attackerSquare: movedSquare,
-      attackerType: attacker.type,
-      targetSquare: t,
-      targetType: tgt.type,
-    });
-  }
-
-  const arrowColor: ArrowColor = attacker.color === 'w' ? 'blue' : 'red';
-  const arrows: Arrow[] = descriptions.map((d) => ({
-    from: d.attackerSquare,
-    to: d.targetSquare,
-    color: arrowColor,
-    auto: true,
-  }));
-
-  return { arrows, descriptions };
+/** Compute every attack by every piece on the board against enemy
+ *  pieces. White's arrows are blue, Black's are red. Empty squares and
+ *  same-color pieces are ignored. Sliding pieces stop at the first
+ *  piece in any direction. */
+export function computeBoardAttacks(fen: string): LiveAttackResult {
+  const game = new GameState(fen);
+  const board = (game as unknown as { chess: { board: () => Board } })
+    .chess.board();
+  return buildThreatsFrom({ board }, null);
 }
 
 // ---------- Hook ----------
@@ -209,9 +250,12 @@ export function useLiveAttacks(
   fen: string,
   enabled: boolean,
   movedSquare: Square | null,
+  scope: 'lastMove' | 'board' = 'lastMove',
 ): LiveAttackResult {
   return useMemo(() => {
-    if (!enabled || !movedSquare) return { arrows: [], descriptions: [] };
+    if (!enabled) return { arrows: [], descriptions: [] };
+    if (scope === 'board') return computeBoardAttacks(fen);
+    if (!movedSquare) return { arrows: [], descriptions: [] };
     return computeLiveAttacks(fen, movedSquare);
-  }, [fen, enabled, movedSquare]);
+  }, [fen, enabled, movedSquare, scope]);
 }

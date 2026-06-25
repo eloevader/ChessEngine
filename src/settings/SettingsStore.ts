@@ -33,9 +33,12 @@ export interface Settings {
   evalBarPosition: EvalBarPosition;
   showAnalysisLines: boolean;
   showThreats: boolean;
+  /** Which threats to show when showThreats is on. 'lastMove' = only the
+   *  piece that just moved. 'board' = every attack by either side. */
+  threatScope: 'lastMove' | 'board';
 }
 
-const STORAGE_KEY = 'chess-analyzer.settings.v6';
+const STORAGE_KEY = 'chess-analyzer.settings.v7';
 // Older keys we may have used previously. We don't read from them, but we
 // delete them on load so users who upgrade don't get stuck on stale settings.
 const LEGACY_STORAGE_KEYS = [
@@ -44,6 +47,7 @@ const LEGACY_STORAGE_KEYS = [
   'chess-analyzer.settings.v3',
   'chess-analyzer.settings.v4',
   'chess-analyzer.settings.v5',
+  'chess-analyzer.settings.v6',
 ];
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -69,6 +73,7 @@ export const DEFAULT_SETTINGS: Settings = {
   evalBarPosition: 'left',
   showAnalysisLines: false,
   showThreats: true,
+  threatScope: 'lastMove',
 };
 
 function loadSettings(): Settings {
