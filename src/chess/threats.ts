@@ -52,8 +52,10 @@ export interface Arrow {
 
 // ---------- Attack computation ----------
 
-/** Returns the set of squares attacked by the piece currently sitting on `from`. */
-function attacksFromSquare(fen: string, from: Square): Set<Square> {
+/** Returns the set of squares attacked by the piece on `from` that contain
+ *  an opponent piece. Sliding pieces only count up to (and including) the
+ *  first piece they encounter. */
+function attacksOpponentPieces(fen: string, from: Square): Set<Square> {
   const game = new GameState(fen);
   const board = (game as unknown as { chess: { board: () => Array<Array<{ type: string; color: 'w' | 'b' } | null>> } })
     .chess.board();
@@ -63,8 +65,9 @@ function attacksFromSquare(fen: string, from: Square): Set<Square> {
   const col = f;
   const piece = board[row]?.[col] ?? null;
   if (!piece) return new Set();
+  const attackerColor = piece.color;
 
-  const pawnDir = piece.color === 'w' ? 1 : -1;
+  const pawnDir = attackerColor === 'w' ? 1 : -1;
   const pawnAttacks: [number, number][] = [[-1, pawnDir], [1, pawnDir]];
 
   let dirs: [number, number][] = [];
@@ -86,14 +89,24 @@ function attacksFromSquare(fen: string, from: Square): Set<Square> {
       const tf = col + df;
       const tr = row + dr;
       if (!inBounds(tf, tr)) continue;
-      squares.add(squareAt(tf, tr));
+      const target = board[tr][tf];
+      if (target && target.color !== attackerColor) {
+        squares.add(squareAt(tf, tr));
+      }
       continue;
     }
     let tf = col + df;
     let tr = row + dr;
     while (inBounds(tf, tr)) {
-      squares.add(squareAt(tf, tr));
-      if (board[tr][tf]) break;
+      const target = board[tr][tf];
+      if (target) {
+        // Sliding pieces attack the first piece they encounter, and only
+        // if it's an opponent's piece. A same-color piece blocks entirely.
+        if (target.color !== attackerColor) {
+          squares.add(squareAt(tf, tr));
+        }
+        break;
+      }
       tf += df;
       tr += dr;
     }
@@ -104,8 +117,10 @@ function attacksFromSquare(fen: string, from: Square): Set<Square> {
 
 // ---------- Hooks ----------
 
-/** Returns the set of squares attacked by the piece that just moved.
- *  Used during analysis / review to draw threat arrows in red. */
+/** Returns the set of squares containing an opponent piece that the
+ *  last-moved piece attacks. Used during analysis / review to draw
+ *  red threat arrows ONLY where the move actually threatens a piece —
+ *  moving a pawn to an empty square is not a threat. */
 export function useLastMoveThreatSquares(
   fen: string,
   enabled: boolean,
@@ -113,7 +128,7 @@ export function useLastMoveThreatSquares(
 ): Set<Square> {
   return useMemo(() => {
     if (!enabled || !lastMove) return new Set();
-    return attacksFromSquare(fen, lastMove.to);
+    return attacksOpponentPieces(fen, lastMove.to);
   }, [fen, enabled, lastMove]);
 }
 

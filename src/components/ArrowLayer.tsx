@@ -22,7 +22,10 @@ function squareCenter(
 }
 
 /** For a knight move, return an L-shaped path: from → corner → to.
- *  For straight-line moves (orthogonal or diagonal), return a single segment. */
+ *  For straight-line moves (orthogonal or diagonal), return a single segment.
+ *  The L goes vertical-first (from → (from.x, to.y) → to), so the piece
+ *  "rises/falls" first and then steps sideways — matching the user's
+ *  preferred convention. */
 function buildPath(
   from: { x: number; y: number },
   to: { x: number; y: number },
@@ -31,15 +34,16 @@ function buildPath(
   if (pieceKind === 'other') {
     return `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
   }
-  // Knight: L-shape. The elbow is at the corner: prefer horizontal-first
-  // (from → (to.x, from.y) → to), which matches the chess.com convention.
-  const elbowX = to.x;
-  const elbowY = from.y;
-  // If the horizontal segment would be zero (same file), use vertical-first
-  // (from → (from.x, to.y) → to) to avoid a zero-length segment.
-  if (Math.abs(elbowX - from.x) < 0.5) {
-    const altElbowY = to.y;
-    const altElbowX = from.x;
+  // Knight: vertical-first L.
+  // Elbow is at (from.x, to.y): piece first moves along its file to the
+  // target's rank, then sideways along the target's rank to the target.
+  const elbowX = from.x;
+  const elbowY = to.y;
+  // If the vertical segment would be zero (same rank), fall back to
+  // horizontal-first to avoid a zero-length segment.
+  if (Math.abs(elbowY - from.y) < 0.5) {
+    const altElbowX = to.x;
+    const altElbowY = from.y;
     return `M ${from.x} ${from.y} L ${altElbowX} ${altElbowY} L ${to.x} ${to.y}`;
   }
   return `M ${from.x} ${from.y} L ${elbowX} ${elbowY} L ${to.x} ${to.y}`;
