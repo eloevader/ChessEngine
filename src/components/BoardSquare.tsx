@@ -26,7 +26,7 @@ interface SquareProps {
 }
 
 function inCellCoords(square: Square, mode: CoordDisplay): { tl?: string; br?: string } {
-  if (mode === 'off') return {};
+  if (mode === 'off' || mode === 'outside') return {};
   const f = fileOf(square);
   const r = rankOf(square);
   const isLeftCol = f === 0;
@@ -36,30 +36,34 @@ function inCellCoords(square: Square, mode: CoordDisplay): { tl?: string; br?: s
   const fileLabel = String.fromCharCode(97 + f);
   const rankLabel = String(r + 1);
 
-  if (mode === 'all') {
-    return { br: `${fileLabel}${rankLabel}` };
-  }
-
-  // 'inside' mode - Lichess style:
-  // - a-column cells: 'a' in top-left
-  // - h-column cells: 'h' in bottom-right
-  // - row 1 cells: '1' in bottom-right
-  // - row 8 cells: '8' in top-left
+  // 'inside' or 'all' mode — Lichess-style edge labels.
+  // - a-column cells: file letter in top-left
+  // - h-column cells: file letter in bottom-right
+  // - row 1 cells: rank number in bottom-right
+  // - row 8 cells: rank number in top-left
+  // - corner cells get BOTH labels.
   const out: { tl?: string; br?: string } = {};
-  if (isLeftCol && isBottomRow) {
+  const onLeftEdge = isLeftCol;
+  const onRightEdge = isRightCol;
+  const onBottomEdge = isBottomRow;
+  const onTopEdge = isTopRow;
+  if (onLeftEdge) {
     out.tl = fileLabel;
-    out.br = rankLabel;
-  } else if (isLeftCol) {
-    out.tl = fileLabel;
-  } else if (isRightCol && isTopRow) {
-    out.tl = rankLabel;
+  }
+  if (onTopEdge) {
+    if (out.tl === undefined) out.tl = rankLabel;
+    else out.tl = `${out.tl}${rankLabel}`;
+  }
+  if (onRightEdge) {
     out.br = fileLabel;
-  } else if (isRightCol) {
-    out.br = fileLabel;
-  } else if (isBottomRow) {
-    out.br = rankLabel;
-  } else if (isTopRow) {
-    out.tl = rankLabel;
+  }
+  if (onBottomEdge) {
+    if (out.br === undefined) out.br = rankLabel;
+    else out.br = `${rankLabel}${out.br}`;
+  }
+  // In 'all' mode, also show the file+rank on every interior cell (small).
+  if (mode === 'all' && !onLeftEdge && !onRightEdge && !onTopEdge && !onBottomEdge) {
+    out.br = `${fileLabel}${rankLabel}`;
   }
   return out;
 }

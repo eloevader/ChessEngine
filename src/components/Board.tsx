@@ -100,7 +100,7 @@ export function Board(props: BoardProps) {
     return out;
   }, [board, files, ranks]);
 
-  const showOutside = settings.coordDisplay === 'outside';
+  const showOutside = settings.coordDisplay === 'outside' || settings.coordDisplay === 'all';
 
   // -------- Right-click arrow drawing (chess.com style) --------
   const [arrowDraft, setArrowDraft] = useState<

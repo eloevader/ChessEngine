@@ -94,7 +94,10 @@ function enemySquaresAttackedBy(board: Board, from: Square): Square[] {
   const piece = board[row]?.[col] ?? null;
   if (!piece) return [];
 
-  const pawnDir = piece.color === 'w' ? 1 : -1;
+  // chess.js's board() is board[0] = rank 8, board[7] = rank 1.
+  // So moving toward higher rank means DECREASING row index.
+  // White pawns move "up" the board (rank increases → row decreases).
+  const pawnDir = piece.color === 'w' ? -1 : 1;
   const pawnAttacks: [number, number][] = [[-1, pawnDir], [1, pawnDir]];
 
   let dirs: [number, number][] = [];
@@ -118,7 +121,9 @@ function enemySquaresAttackedBy(board: Board, from: Square): Square[] {
       if (!inBounds(tf, tr)) continue;
       const target = board[tr]?.[tf] ?? null;
       if (target && target.color !== piece.color) {
-        out.push(squareAt(tf, tr));
+        // squareAt expects (fileIdx, rankIdx 1-8); tr is a board row
+        // index (0 = rank 8) so convert with 7 - tr.
+        out.push(squareAt(tf, 7 - tr));
       }
       continue;
     }
@@ -127,7 +132,7 @@ function enemySquaresAttackedBy(board: Board, from: Square): Square[] {
     while (inBounds(tf, tr)) {
       const target = board[tr]?.[tf] ?? null;
       if (target) {
-        if (target.color !== piece.color) out.push(squareAt(tf, tr));
+        if (target.color !== piece.color) out.push(squareAt(tf, 7 - tr));
         break; // sliding piece stops at the first piece in any direction
       }
       tf += df;
