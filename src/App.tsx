@@ -635,6 +635,22 @@ function App() {
   const showEvalBar = settings.evalBarEnabled && isEngineThinking;
   const isReviewMode = reviewing && isGameEnded;
 
+  // Stockfish reports scores from the side-to-move's perspective. The eval
+  // bar is always drawn from White's perspective, so flip the sign when it's
+  // Black to move.
+  const scoreCpWhite: number | null =
+    engine.scoreCp === null
+      ? null
+      : snapshot.turn === 'b'
+        ? -engine.scoreCp
+        : engine.scoreCp;
+  const scoreMateWhite: number | null =
+    engine.scoreMate === null
+      ? null
+      : snapshot.turn === 'b'
+        ? -engine.scoreMate
+        : engine.scoreMate;
+
   const statusText = (() => {
     if (gameEndReason?.kind === 'draw') return 'Draw by agreement';
     if (gameEndReason?.kind === 'resign') {
@@ -696,8 +712,8 @@ function App() {
           )}
           {showEvalBar && settings.evalBarPosition === 'top' && (
             <EvalBar
-              scoreCp={engine.scoreCp}
-              scoreMate={engine.scoreMate}
+              scoreCp={scoreCpWhite}
+              scoreMate={scoreMateWhite}
               showText
               orientation="horizontal"
               position="top"
@@ -707,8 +723,8 @@ function App() {
           <div className={`board-row eval-pos-${settings.evalBarPosition}`}>
             {showEvalBar && settings.evalBarPosition === 'left' && (
               <EvalBar
-                scoreCp={engine.scoreCp}
-                scoreMate={engine.scoreMate}
+                scoreCp={scoreCpWhite}
+                scoreMate={scoreMateWhite}
                 showText
                 orientation="vertical"
                 position="left"
@@ -737,8 +753,8 @@ function App() {
             />
             {showEvalBar && settings.evalBarPosition === 'right' && (
               <EvalBar
-                scoreCp={engine.scoreCp}
-                scoreMate={engine.scoreMate}
+                scoreCp={scoreCpWhite}
+                scoreMate={scoreMateWhite}
                 showText
                 orientation="vertical"
                 position="right"
@@ -748,8 +764,8 @@ function App() {
           </div>
           {showEvalBar && settings.evalBarPosition === 'bottom' && (
             <EvalBar
-              scoreCp={engine.scoreCp}
-              scoreMate={engine.scoreMate}
+              scoreCp={scoreCpWhite}
+              scoreMate={scoreMateWhite}
               showText
               orientation="horizontal"
               position="bottom"

@@ -39,6 +39,7 @@ export function EvalBar({
 
   let fraction = 0.5;
   let label = '';
+  let mateInProgress = false;
 
   if (!hasScore) {
     label = '…';
@@ -55,12 +56,23 @@ export function EvalBar({
     }
   } else if (scoreCp !== null && Number.isFinite(scoreCp)) {
     fraction = scoreToFraction(scoreCp);
-    if (Math.abs(scoreCp) >= 100) {
+    // Show one decimal for clarity once the score is meaningful.
+    const abs = Math.abs(scoreCp);
+    if (abs >= 1000) {
       label = (scoreCp / 100).toFixed(1);
+    } else if (abs >= 100) {
+      label = (scoreCp / 100).toFixed(2);
     } else {
       label = (scoreCp / 100).toFixed(2);
     }
     if (scoreCp > 0) label = '+' + label;
+    mateInProgress = false;
+  }
+
+  // Detect "engine is now looking at a forced mate" from a recent best line
+  // (e.g. depth-1 reports a mate). The bar should show "M3" etc.
+  if (scoreMate !== null && Number.isFinite(scoreMate) && scoreMate !== 0) {
+    mateInProgress = true;
   }
 
   const isHorizontal = orientation === 'horizontal';
@@ -70,7 +82,7 @@ export function EvalBar({
 
   return (
     <div
-      className={`eval-bar ${isHorizontal ? 'eval-bar-horizontal' : 'eval-bar-vertical'} eval-pos-${position}`}
+      className={`eval-bar ${isHorizontal ? 'eval-bar-horizontal' : 'eval-bar-vertical'} eval-pos-${position} ${hasScore ? '' : 'eval-bar-loading'}`}
       title={title}
       data-empty={!hasScore ? 'true' : 'false'}
     >
@@ -97,6 +109,14 @@ export function EvalBar({
           <div className="eval-bar-white" style={{ height: `${fraction * 100}%` }} />
         </>
       )}
+      {!hasScore && (
+        <div className="eval-bar-think" aria-hidden="true">
+          <span className="dot" />
+          <span className="dot" />
+          <span className="dot" />
+        </div>
+      )}
+      {mateInProgress && <div className="eval-bar-mate-badge">M</div>}
     </div>
   );
 }

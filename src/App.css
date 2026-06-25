@@ -127,6 +127,105 @@ body {
   }
 }
 
+/* On portrait phones, the page goes full-screen so the board isn't squeezed
+   by surrounding chrome and a scrollbar never appears while dragging.
+   The header / status / arrow toolbar / controls / move list are kept
+   accessible in a small footer so the user can still play and review. */
+@media (max-width: 480px) and (orientation: portrait) {
+  html, body, #root {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+  body {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+  }
+  .app {
+    height: 100dvh;
+    width: 100vw;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    touch-action: none;
+  }
+  .app-main {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    grid-template-columns: 1fr;
+    gap: 6px;
+    max-width: none;
+    padding: 6px 6px 0;
+  }
+  .board-area {
+    flex: 1 1 auto;
+    min-height: 0;
+    position: static;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    max-width: none;
+    margin: 0;
+  }
+  /* Center the board in the available vertical space and let it grow up to
+     the available width. */
+  .board-row {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    min-height: 0;
+  }
+  .board-row > .board {
+    width: min(100%, 100vw - 24px);
+    height: auto;
+    max-height: 100%;
+    align-self: center;
+  }
+  /* Eval bar lives on the right of the board (instead of left/bottom) to
+     keep the board as large as possible. */
+  .board-row.eval-pos-left,
+  .board-row.eval-pos-right {
+    gap: 6px;
+  }
+  .eval-pos-left .eval-bar-vertical,
+  .eval-pos-right .eval-bar-vertical {
+    width: 14px;
+    min-width: 14px;
+  }
+  .app-header h1 { font-size: 16px; }
+  .app-header { margin-bottom: 0; }
+  .status-bar { font-size: 12px; padding: 4px 8px; }
+  .side-panel {
+    /* On portrait phones the side panel (move history) collapses to a
+       single scrollable strip beneath the board. */
+    position: static;
+    max-height: 30vh;
+    overflow-y: auto;
+    flex: 0 0 auto;
+    padding-bottom: 0;
+  }
+  .side-panel-spacer { display: none; }
+  .controls { flex-wrap: wrap; gap: 4px; padding: 4px 0; }
+  .controls button { padding: 6px 10px; font-size: 12px; }
+  .arrow-toolbar { padding: 4px 6px; gap: 4px; }
+  .arrow-toolbar-label { font-size: 10px; }
+  .arrow-swatch { width: 18px; height: 18px; }
+  .arrow-clear-btn { font-size: 11px; padding: 3px 6px; }
+  .arrow-hint { display: none; }
+  .clock-display { font-size: 14px; padding: 2px 6px; }
+  .game-actions { padding: 4px 0; }
+  .game-action-btn { padding: 4px 8px; font-size: 11px; }
+  .post-game-actions { padding: 4px 0; }
+}
+
 .status-bar {
   background: var(--bg-panel);
   border: 1px solid var(--border-clr);
@@ -451,6 +550,7 @@ body {
   overflow: hidden;
   user-select: none;
   position: relative;
+  touch-action: none;
 }
 
 .board::before {
@@ -929,12 +1029,12 @@ body {
   border: 1px solid var(--border-clr);
 }
 .eval-bar-vertical {
-  width: 22px;
+  width: 28px;
   display: flex;
   flex-direction: column;
 }
 .eval-bar-horizontal {
-  height: 22px;
+  height: 24px;
   width: 100%;
   max-width: min(72vw, 560px);
   margin: 0 auto;
@@ -969,14 +1069,52 @@ body {
   height: 100%;
 }
 .eval-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   font-family: ui-monospace, Consolas, monospace;
   pointer-events: none;
   white-space: nowrap;
 }
 .eval-label-bottom { color: #f4f4f4; }
-.eval-label-inline { color: #f4f4f4; font-size: 11px; }
+.eval-label-inline { color: #f4f4f4; font-size: 12px; }
+
+/* Pulsing "thinking" indicator shown while the engine hasn't reported a
+   score yet. */
+.eval-bar-think {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  pointer-events: none;
+}
+.eval-bar-think .dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(244, 244, 244, 0.85);
+  animation: eval-think-pulse 1.2s ease-in-out infinite;
+}
+.eval-bar-think .dot:nth-child(2) { animation-delay: 0.2s; }
+.eval-bar-think .dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes eval-think-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50%      { opacity: 1;   transform: scale(1.2); }
+}
+
+/* M (mate) badge so users immediately see a forced mate is in progress. */
+.eval-bar-mate-badge {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  font-weight: 700;
+  color: #fbbf24;
+  pointer-events: none;
+  text-shadow: 0 0 2px rgba(0,0,0,0.6);
+}
 
 .eval-pos-left,
 .eval-pos-right { align-self: stretch; }
