@@ -7,6 +7,7 @@ import { CapturedRow } from './components/CapturedPieces';
 import { EvalBar } from './components/EvalBar';
 import { ClockDisplay } from './components/ClockDisplay';
 import { NewGameDialog } from './components/NewGameDialog';
+import { LichessImportDialog } from './components/LichessImportDialog';
 import { GameState, type LegalMove } from './chess/GameState';
 import type { Piece, Square } from './chess/types';
 import {
@@ -24,6 +25,7 @@ import { getTheme, themeToCss } from './chess/themes';
 import { useEngine } from './engine/useEngine';
 import { useChessClock } from './chess/ChessClock';
 import { useLiveAttacks, type Arrow, type ArrowColor, type AttackDescription } from './chess/threats';
+import { useMoveClassification } from './chess/useMoveClassification';
 import './App.css';
 
 // ---------------- Types ----------------
@@ -156,6 +158,18 @@ function App() {
   );
   /** Currently selected arrow color for the next right-click drag. */
   const [arrowColor, setArrowColor] = useState<ArrowColor>('green');
+  /** Lichess import dialog open/closed. */
+  const [lichessOpen, setLichessOpen] = useState(false);
+  /** Last imported Lichess game's headers (for display). */
+  const [lichessHeaders, setLichessHeaders] = useState<Record<string, string> | null>(null);
+  /** Pre-move queued during the engine's turn (vs-computer mode only).
+   *  Played automatically as soon as it becomes the human's turn, if
+   *  still legal. */
+  const [preMove, setPreMove] = useState<{
+    from: Square;
+    to: Square;
+    promotion?: 'q' | 'r' | 'b' | 'n';
+  } | null>(null);
 
   // -------- Derived state --------
   const snapshot = game.snapshot();
@@ -182,6 +196,52 @@ function App() {
   const attackDescriptions: AttackDescription[] = liveAttacks.descriptions;
   const allArrows = useMemo(() => [...threatArrows, ...arrows], [threatArrows, arrows]);
   const board = useMemo(() => buildBoard(fen), [fen]);
+
+  // Move classification: only enabled in analysis / review. In live
+  // play (local or computer) we don't run the classifier so the
+  // engine doesn't have to evaluate historical positions.
+  const moveClassifications = useMoveClassification({
+    history: fullHistory,
+    evaluate: engine.evalPosition,
+    viewPly,
+    enabled: settings.gameMode === 'analysis' || reviewing,
+  });
+
+  // Per-square map of move annotations for the move the user is
+  // currently viewing. Keyed by the move's destination square.
+  // We only show the tag for the move that just played (or the one
+  // the user navigated to). chess.com-style: tag floats over the
+  // piece that just moved.
+  const moveTagsByTo = useMemo(() => {
+    const out = new Map<Square, { tag: string; label: string }>();
+    if (viewPly <= 0) return out;
+    if (viewPly > fullHistory.length) return out;
+    const c = moveClassifications.classifications[viewPly - 1];
+    if (!c) return out;
+    if (c.classification.tag === '?') return out;
+    // We need the destination square. The lastMove in App state
+    // tracks the most recent move, but if the user has navigated
+    // back, lastMove still reflects the latest played move (not
+    // the move at viewPly). We need to look up the SAN → UCI
+    // conversion via the GameState, or maintain a per-ply map.
+    // We can derive it from the game history: replay the moves up
+    // to viewPly and find the last one's destination.
+    const g = new GameState();
+    let lastTo: Square | null = null;
+    for (let i = 0; i < viewPly; i++) {
+      const r = g.moveSan(fullHistory[i]);
+      if (r) lastTo = r.to as Square;
+    }
+    if (lastTo) {
+      out.set(lastTo, {
+        tag: c.classification.tag,
+        label: c.classification.description,
+      });
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewPly, fullHistory, moveClassifications.classifications]);
+
   const kingInCheck = useMemo(
     () => (snapshot.inCheck ? findKingSquare(fen, snapshot.turn) : null),
     [fen, snapshot.inCheck, snapshot.turn],
@@ -245,7 +305,7 @@ function App() {
       else if (nextSnap.isStalemate || nextSnap.isDraw) emit({ type: 'draw' });
       else if (nextSnap.inCheck) emit({ type: 'check' });
 
-      if (settings.flipAfterMove) {
+      if (settings.flipAfterMove && settings.gameMode !== 'computer') {
         setTimeout(
           () => setOrientation((o) => (o === 'w' ? 'b' : 'w')),
           ANIMATION_DURATIONS_MS[settings.animationSpeed],
@@ -257,6 +317,7 @@ function App() {
   );
 
   // -------- Click handling --------
+  /** Can the human actually move a piece RIGHT NOW (not a pre-move). */
   const canHumanMove = (): boolean => {
     if (pendingPromotion || animatingMove) return false;
     if (snapshot.isGameOver || gameEndReason) return false;
@@ -266,27 +327,85 @@ function App() {
       engineSide !== null &&
       snapshot.turn === engineSide
     ) {
-      return false;
+      return false; // engine is thinking — pre-move only
     }
     return true;
   };
 
+  /** True if it's the engine's turn in computer mode and the game is
+   *  still in progress — i.e. the human may queue a pre-move. */
+  const canPreMove = (): boolean => {
+    if (pendingPromotion || animatingMove) return false;
+    if (snapshot.isGameOver || gameEndReason) return false;
+    return (
+      settings.gameMode === 'computer' &&
+      engineSide !== null &&
+      snapshot.turn === engineSide
+    );
+  };
+
+  /** True if pre-moves are allowed at all in the current mode. */
+  const preMovesEnabled = settings.gameMode === 'computer';
+
   const handleSquareClick = useCallback(
     (square: Square) => {
-      if (!canHumanMove()) return;
       const piece = game.pieceAt(square);
 
-      // Left-click on an empty square with no selection: clear user arrows
-      // and highlights. This is the user's "left-click clears arrows" affordance.
-      if (
-        selected === null &&
-        !piece &&
-        (arrows.length > 0 || squareHighlights.size > 0)
-      ) {
+      // Left-click clears any user-drawn arrows and square highlights.
+      // This works on ANY left-click (even when the human can't move —
+      // e.g. it's the computer's turn, the game is over, an animation
+      // is in progress, or a promotion is pending). It's the user's
+      // "clear the board" affordance.
+      if (arrows.length > 0 || squareHighlights.size > 0) {
         setArrows([]);
         setSquareHighlights(new Map());
         return;
       }
+
+      // Pre-move handling: when the engine is thinking and the human
+      // clicks a from→to pair of their own pieces, queue a pre-move
+      // instead of executing it. The pre-move will fire as soon as
+      // it becomes the human's turn (if still legal).
+      if (canPreMove()) {
+        const humanColor = engineSide === 'w' ? 'b' : 'w';
+        // If a pre-move is already queued, allow re-selecting from
+        // by clicking the original pre-move's "from" or by clicking
+        // any of the human's own pieces (replaces the pre-move's
+        // starting square).
+        if (preMove === null) {
+          if (piece && piece.color === humanColor) {
+            setPreMove({ from: square, to: square });
+          }
+          return;
+        }
+        // A pre-move is queued. Clicks:
+        //   - on the from square: cancel the pre-move
+        //   - on the to square (after setting from): keep from, drop to
+        //   - on a different own-piece: change the from square
+        //   - on an enemy / own target square: set the to square
+        if (square === preMove.from) {
+          setPreMove(null);
+          return;
+        }
+        const fromPiece = game.pieceAt(preMove.from);
+        if (piece && piece.color === humanColor && square !== preMove.to) {
+          // Re-pick a new starting square
+          setPreMove({ from: square, to: square });
+          return;
+        }
+        // Otherwise it's the destination — set it.
+        if (fromPiece) {
+          // Check for promotion (pawn to back rank).
+          const promo =
+            fromPiece.type === 'p' && (square[1] === '1' || square[1] === '8')
+              ? 'q'
+              : undefined;
+          setPreMove({ from: preMove.from, to: square, promotion: promo });
+        }
+        return;
+      }
+
+      if (!canHumanMove()) return;
 
       if (selected === null) {
         if (piece && piece.color === game.turn()) selectSquare(square);
@@ -332,6 +451,7 @@ function App() {
       engineSide,
       arrows.length,
       squareHighlights.size,
+      preMove,
     ],
   );
 
@@ -418,15 +538,16 @@ function App() {
     setReviewing(false);
     setArrows([]);
     setSquareHighlights(new Map());
+    setPreMove(null);
   };
 
   // -------- Arrow drawing (right-click drag, chess.com style) --------
   const onArrowDraw = useCallback(
     (from: Square, to: Square, color: ArrowColor) => {
       setArrows((prev) => {
-        // If an arrow in the same color exists in the same direction, remove it
-        // (toggling off). If one exists in the opposite direction with the
-        // same color, replace it.
+        // If an arrow in the same color exists in the same direction,
+        // remove it (toggle off). If one exists in the opposite
+        // direction with the same color, replace it.
         const same = prev.findIndex(
           (a) => a.from === from && a.to === to && a.color === color,
         );
@@ -444,12 +565,11 @@ function App() {
           next.push({ from, to, color });
           return next;
         }
-        // Remove any existing arrow from `from` in the same color (chess.com
-        // behavior: a square only has one arrow out of it per color).
-        const filtered = prev.filter(
-          (a) => !(a.from === from && a.color === color),
-        );
-        return [...filtered, { from, to, color }];
+        // Multiple arrows are allowed from a single square (different
+        // targets, different colors). We deliberately do NOT remove
+        // existing arrows from `from` — the user can have many
+        // outgoing arrows from one square.
+        return [...prev, { from, to, color }];
       });
     },
     [],
@@ -505,6 +625,11 @@ function App() {
 
     if (config.mode === 'computer') {
       setEngineSide(pickEngineSide(config.side ?? settings.playerSide));
+      // Auto-orient so the human player's side is at the bottom.
+      const playerColor = config.side ?? settings.playerSide;
+      if (playerColor === 'w' || playerColor === 'b') {
+        setOrientation(playerColor);
+      }
     } else if (config.mode === 'analysis') {
       setEngineSide(null);
     } else {
@@ -529,6 +654,56 @@ function App() {
     setNewGameOpen(false);
   };
 
+  // -------- Lichess game import --------
+  // Replace the current game with the imported one. The user can
+  // then step through the moves in analysis mode.
+  const onSelectLichessGame = (imported: { moves: string[]; headers: Record<string, string> }) => {
+    // Persist to history (in addition to in-memory state) so a
+    // page reload restores the game.
+    try {
+      localStorage.setItem('chess-analyzer.imported-game', JSON.stringify(imported));
+    } catch {
+      /* ignore */
+    }
+    setLichessHeaders(imported.headers);
+    // Reset the GameState and replay the moves to ensure they're all
+    // legal. If any move fails, we stop at that point.
+    const tempGame = new GameState();
+    const validMoves: string[] = [];
+    for (const san of imported.moves) {
+      try {
+        tempGame.moveSan(san);
+        validMoves.push(san);
+      } catch {
+        break;
+      }
+    }
+    setFullHistory(validMoves);
+    setFen(tempGame.fen());
+    setViewPly(validMoves.length);
+    setLastMove(null);
+    setSelected(null);
+    setLegalTargets(new Set());
+    setCaptureTargets(new Set());
+    setAnimatingMove(null);
+    setPendingPromotion(null);
+    setGameEndReason(null);
+    setDrawOffer(null);
+    setReviewing(false);
+    setArrows([]);
+    setSquareHighlights(new Map());
+    setPreMove(null);
+    setEngineSide(null);
+    setClockEnabled(false);
+    clock.reset({ initialSeconds: 0, incrementSeconds: 0 });
+    setCaptures({ white: [], black: [] });
+    // Auto-enter analysis mode so the user can step through.
+    setCommittedSettings({
+      ...settings,
+      gameMode: 'analysis',
+    });
+  };
+
   // -------- Undo (computer mode only) --------
   const onUndo = () => {
     if (animatingMove) return;
@@ -536,7 +711,19 @@ function App() {
     if (fullHistory.length === 0) return;
     if (viewPly < fullHistory.length) jumpToPly(fullHistory.length);
 
-    const newHistory = fullHistory.slice(0, -1);
+    // Determine the color of the last move in history. White moves
+    // first, so ply 1 is white, ply 2 is black, etc.
+    const lastPly = fullHistory.length;
+    const lastMoveColor: 'w' | 'b' = lastPly % 2 === 1 ? 'w' : 'b';
+    const humanColor: 'w' | 'b' = engineSide === 'w' ? 'b' : 'w';
+    // Undo enough plies so we end up with the position BEFORE the
+    // human's most recent move. If the last move was the human's,
+    // remove just 1 ply. If the last move was the computer's, remove
+    // 2 (computer + previous human move). If the first move was the
+    // computer's, only remove 1.
+    const undoCount =
+      lastMoveColor === humanColor || lastPly === 1 ? 1 : 2;
+    const newHistory = fullHistory.slice(0, Math.max(0, lastPly - undoCount));
     setFullHistory(newHistory);
     game.reset();
     const newCaptures = { white: [] as Piece[], black: [] as Piece[] };
@@ -555,6 +742,7 @@ function App() {
     setFen(game.fen());
     setViewPly(newHistory.length);
     setLastMove(null);
+    setPreMove(null);
     engine.clearBestMove();
     engine.stop();
   };
@@ -588,7 +776,25 @@ function App() {
   const onJumpTo = (ply: number) => jumpToPly(ply);
   const onJumpStart = () => jumpToPly(0);
   const onJumpBack = () => jumpToPly(Math.max(0, viewPly - 1));
-  const onJumpForward = () => jumpToPly(Math.min(fullHistory.length, viewPly + 1));
+  // "Next" jumps to the *next human move* — in computer mode that
+  // means skipping the computer's reply. The human's turn plies are
+  // 1, 3, 5, ... if human is white; 2, 4, 6, ... if human is black.
+  const onJumpForward = () => {
+    if (settings.gameMode !== 'computer' || engineSide === null) {
+      jumpToPly(Math.min(fullHistory.length, viewPly + 1));
+      return;
+    }
+    const humanColor: 'w' | 'b' = engineSide === 'w' ? 'b' : 'w';
+    // Find the smallest ply > viewPly where it's the human's turn.
+    // Human's turn occurs at ply numbers: if human=white, odd; if
+    // human=black, even.
+    const targetParity = humanColor === 'w' ? 1 : 0;
+    let next = viewPly + 1;
+    while (next < fullHistory.length && next % 2 !== targetParity) {
+      next += 1;
+    }
+    jumpToPly(Math.min(fullHistory.length, next));
+  };
   const onJumpEnd = () => jumpToPly(fullHistory.length);
 
   const onFlip = () => setOrientation((o) => (o === 'w' ? 'b' : 'w'));
@@ -601,6 +807,7 @@ function App() {
     if (isGameEnded) {
       void engineStop();
       clock.switchTo(null);
+      setPreMove(null);
     }
   }, [isGameEnded, clock, engineStop]);
 
@@ -638,25 +845,53 @@ function App() {
     // The game has ended; jump to the start so the user can review with
     // the engine thinking on every position they navigate to.
     setReviewing(true);
+    clock.switchTo(null);
     jumpToPly(0);
   };
+  const onExitReview = () => {
+    setReviewing(false);
+    clock.switchTo(null);
+  };
+
+  // -------- Restore last imported Lichess game on first mount --------
+  // We do this in a separate effect after onSelectLichessGame is
+  // defined so the closure has access to the latest setter chain.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('chess-analyzer.imported-game');
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as {
+        moves: string[];
+        headers: Record<string, string>;
+      };
+      if (parsed.moves && parsed.moves.length > 0) {
+        onSelectLichessGame(parsed);
+      }
+    } catch {
+      /* ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // -------- Engine integration --------
   // The engine should think:
   //   - during analysis mode (anytime the user is exploring)
   //   - when the user is reviewing past moves (post-game review)
-  //   - when it's the engine's turn in computer mode and game is ongoing
-  const isEngineTurn =
+  //   - when it's the engine's turn in computer mode and the game is
+  //     still in progress (so the computer can play its moves)
+  const isComputerPlaying =
     settings.gameMode === 'computer' &&
     engineSide !== null &&
     viewPly === fullHistory.length &&
     snapshot.turn === engineSide &&
     !isGameEnded &&
     !gameEndReason;
+  // The engine runs (think + emit bestmove) in analysis, review, and
+  // when it's the computer's turn. The eval BAR is shown only in
+  // analysis or review — never while playing vs the computer, so the
+  // human can't peek at the live eval.
   const isEngineThinking =
-    settings.gameMode === 'analysis' ||
-    reviewing ||
-    isEngineTurn;
+    settings.gameMode === 'analysis' || reviewing || isComputerPlaying;
 
   useEffect(() => {
     if (isEngineThinking) {
@@ -665,6 +900,47 @@ function App() {
       void engineStop();
     }
   }, [fen, isEngineThinking, engineRequestEval, engineStop, settings.engineLevel]);
+
+  // Pre-move: when it's the human's turn in computer mode and a
+  // pre-move is queued, play it if it's still legal. Otherwise drop
+  // it silently.
+  useEffect(() => {
+    if (!preMove) return;
+    if (settings.gameMode !== 'computer') return;
+    if (engineSide === null) return;
+    if (snapshot.turn === engineSide) return; // still engine's turn
+    if (isGameEnded || gameEndReason) {
+      setPreMove(null);
+      return;
+    }
+    if (animatingMove) return; // wait for the engine's move to finish animating
+    // Check legality in the current position.
+    const legal = game.legalMovesFrom(preMove.from);
+    const stillLegal = legal.some(
+      (m) =>
+        m.to === preMove.to &&
+        (m.promotion ?? undefined) === preMove.promotion,
+    );
+    if (stillLegal) {
+      const from = preMove.from;
+      const to = preMove.to;
+      const promo = preMove.promotion;
+      setPreMove(null);
+      tryMove(from, to, promo);
+    } else {
+      setPreMove(null);
+    }
+  }, [
+    preMove,
+    settings.gameMode,
+    engineSide,
+    snapshot.turn,
+    isGameEnded,
+    gameEndReason,
+    animatingMove,
+    fen,
+    tryMove,
+  ]);
 
   // Apply engine's best move
   useEffect(() => {
@@ -682,11 +958,40 @@ function App() {
       const to = m.slice(2, 4) as Square;
       const promo = m.length > 4 ? (m[4] as 'q' | 'r' | 'b' | 'n') : undefined;
       tryMove(from, to, promo);
+    } else if (
+      !engineBestMove &&
+      settings.gameMode === 'computer' &&
+      engineSide !== null &&
+      snapshot.turn === engineSide &&
+      !isGameEnded &&
+      !gameEndReason &&
+      engine.status === 'error'
+    ) {
+      // No engine bridge running — pick a random legal move so the
+      // user can still play around. The status bar will show the
+      // bridge command.
+      const legal = game.legalMoves();
+      if (legal.length > 0) {
+        const choice = legal[Math.floor(Math.random() * legal.length)];
+        if (choice) {
+          const promo = choice.promotion
+            ? (choice.promotion as 'q' | 'r' | 'b' | 'n')
+            : undefined;
+          window.setTimeout(
+            () => tryMove(choice.from as Square, choice.to as Square, promo),
+            500,
+          );
+        }
+      }
     }
-  }, [engineBestMove, settings.gameMode, engineSide, isGameEnded, gameEndReason, snapshot.turn, tryMove, engineClearBestMove]);
+  }, [engineBestMove, settings.gameMode, engineSide, isGameEnded, gameEndReason, snapshot.turn, tryMove, engineClearBestMove, engine.status]);
 
   // -------- Status text --------
-  const showEvalBar = settings.evalBarEnabled && isEngineThinking;
+  // Eval bar only in analysis / review — never during an active play
+  // (vs computer or vs local) so the human can't see the live eval.
+  const showEvalBar =
+    settings.evalBarEnabled &&
+    (settings.gameMode === 'analysis' || reviewing);
   const isReviewMode = reviewing && isGameEnded;
 
   // Stockfish reports scores from the side-to-move's perspective. The eval
@@ -748,12 +1053,32 @@ function App() {
       <main className="app-main">
         <div className="board-area">
           <header className="app-header">
-            <h1>Chess Analyzer</h1>
+            <h1>Chess Analyzer <span className="beta-tag">beta</span></h1>
           </header>
           <div className="status-bar" data-status={snapshot.inCheck ? 'check' : ''}>
             {statusText}
+            {lichessHeaders?.White && lichessHeaders?.Black && (
+              <span className="lichess-info">
+                {' • '}
+                {lichessHeaders.White} vs {lichessHeaders.Black}
+                {lichessHeaders.Opening ? ` (${lichessHeaders.Opening})` : ''}
+                {lichessHeaders.Result ? ` — ${lichessHeaders.Result}` : ''}
+              </span>
+            )}
+            {moveClassifications.openingName && (
+              <span className="lichess-info">
+                {' • '}{moveClassifications.openingName}
+              </span>
+            )}
             {settings.gameMode === 'computer' && engine.status === 'thinking' && ' • thinking…'}
-            {settings.gameMode === 'computer' && engine.status === 'loading' && ' • loading engine…'}
+            {settings.gameMode === 'computer' && engine.status === 'loading' && (
+              <span className="status-error">
+                {' • engine offline — run: node scripts/stockfish-bridge.js'}
+              </span>
+            )}
+            {engine.status === 'error' && engine.error && (
+              <span className="status-error"> • engine error: {engine.error}</span>
+            )}
           </div>
           <CapturedRow captures={captures} side={topSide} />
           {clockEnabled && (
@@ -772,6 +1097,8 @@ function App() {
               orientation="horizontal"
               position="top"
               title={engine.bestLine ? `Depth ${engine.bestLine.depth}` : 'Eval'}
+              status={engine.status}
+              bestLine={engine.bestLine}
             />
           )}
           <div className={`board-row eval-pos-${settings.evalBarPosition}`}>
@@ -783,6 +1110,8 @@ function App() {
                 orientation="vertical"
                 position="left"
                 title={engine.bestLine ? `Depth ${engine.bestLine.depth}` : 'Eval'}
+                status={engine.status}
+                bestLine={engine.bestLine}
               />
             )}
             <Board
@@ -797,6 +1126,8 @@ function App() {
               arrows={allArrows}
               squareHighlights={squareHighlights}
               arrowColor={arrowColor}
+              preMove={preMovesEnabled ? preMove : null}
+              moveTagsByTo={moveTagsByTo}
               onArrowDraw={onArrowDraw}
               onArrowEraseAt={onArrowEraseAt}
               onSquareRightClick={onSquareRightClick}
@@ -815,6 +1146,8 @@ function App() {
                 orientation="vertical"
                 position="right"
                 title={engine.bestLine ? `Depth ${engine.bestLine.depth}` : 'Eval'}
+                status={engine.status}
+                bestLine={engine.bestLine}
               />
             )}
           </div>
@@ -826,6 +1159,8 @@ function App() {
               orientation="horizontal"
               position="bottom"
               title={engine.bestLine ? `Depth ${engine.bestLine.depth}` : 'Eval'}
+              status={engine.status}
+              bestLine={engine.bestLine}
             />
           )}
           {clockEnabled && (
@@ -866,7 +1201,7 @@ function App() {
           )}
           {isReviewMode && (
             <div className="post-game-actions">
-              <button onClick={() => setReviewing(false)}>Back to result</button>
+              <button onClick={onExitReview}>Back to result</button>
             </div>
           )}
           {/* Game actions (Draw/Resign) — only in a play mode AND only once a
@@ -928,6 +1263,12 @@ function App() {
           <div className="controls">
             <button onClick={() => setNewGameOpen(true)}>New Game</button>
             <button
+              onClick={() => setLichessOpen(true)}
+              title="Import a game from Lichess"
+            >
+              Lichess
+            </button>
+            <button
               onClick={onUndo}
               disabled={
                 settings.gameMode !== 'computer' ||
@@ -954,12 +1295,13 @@ function App() {
           <MoveHistory
             history={fullHistory}
             sanMoves={useMemo(() => fullHistory.map((san) => ({ san } as LegalMove)), [fullHistory])}
-            currentPly={viewPly - 1}
+            currentPly={viewPly}
             onJumpTo={onJumpTo}
             onJumpStart={onJumpStart}
             onJumpBack={onJumpBack}
             onJumpForward={onJumpForward}
             onJumpEnd={onJumpEnd}
+            classifications={moveClassifications.classifications}
           />
         </aside>
       </main>
@@ -975,6 +1317,11 @@ function App() {
         open={newGameOpen}
         onStart={onStartNewGame}
         onCancel={() => setNewGameOpen(false)}
+      />
+      <LichessImportDialog
+        open={lichessOpen}
+        onClose={() => setLichessOpen(false)}
+        onSelect={onSelectLichessGame}
       />
     </div>
   );

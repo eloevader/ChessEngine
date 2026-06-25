@@ -11,6 +11,11 @@ interface EvalBarProps {
   orientation?: 'vertical' | 'horizontal';
   /** Position around the board (affects which side the text label appears on). */
   position?: 'left' | 'right' | 'top' | 'bottom';
+  /** Engine status — when 'thinking' and no score yet, we still want to
+   *  display a non-empty bar so the user knows the engine is alive. */
+  status?: 'idle' | 'loading' | 'ready' | 'thinking' | 'error';
+  /** Latest best line (used to extract depth during the warm-up window). */
+  bestLine?: { depth: number } | null;
 }
 
 /** Maps a centipawn score to a 0-1 fraction for the white-bar height.
@@ -34,6 +39,8 @@ export function EvalBar({
   title,
   orientation = 'vertical',
   position = 'left',
+  status = 'thinking',
+  bestLine = null,
 }: EvalBarProps) {
   const hasScore = isValidScore(scoreCp, scoreMate);
 
@@ -42,7 +49,18 @@ export function EvalBar({
   let mateInProgress = false;
 
   if (!hasScore) {
-    label = '…';
+    // No real score yet. If Stockfish is already reporting a line
+    // (e.g. depth 3) but no `score cp` has arrived, show the depth so
+    // the bar reads as "alive". Otherwise show the "thinking" dots.
+    if (bestLine && bestLine.depth > 0) {
+      label = `d${bestLine.depth}`;
+    } else if (status === 'loading') {
+      label = '…';
+    } else if (status === 'error') {
+      label = '!';
+    } else {
+      label = '…';
+    }
   } else if (scoreMate !== null && Number.isFinite(scoreMate)) {
     if (scoreMate === 0) {
       fraction = 0.5;
@@ -85,6 +103,7 @@ export function EvalBar({
       className={`eval-bar ${isHorizontal ? 'eval-bar-horizontal' : 'eval-bar-vertical'} eval-pos-${position} ${hasScore ? '' : 'eval-bar-loading'}`}
       title={title}
       data-empty={!hasScore ? 'true' : 'false'}
+      data-status={status}
     >
       {isHorizontal ? (
         <>

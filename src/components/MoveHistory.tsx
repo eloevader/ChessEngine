@@ -1,4 +1,5 @@
 import type { LegalMove } from '../chess/GameState';
+import type { ClassifiedPly, MoveTag } from '../chess/classifier';
 
 interface MoveHistoryProps {
   history: string[];
@@ -9,7 +10,36 @@ interface MoveHistoryProps {
   onJumpBack?: () => void;
   onJumpForward?: () => void;
   onJumpEnd?: () => void;
+  /** Per-ply classification (optional). When present, each move
+   *  gets a colored tag dot. */
+  classifications?: ClassifiedPly[];
 }
+
+const TAG_GLYPH: Record<MoveTag, string> = {
+  book: '📖',
+  brilliant: '!!',
+  great: '!',
+  best: '★',
+  good: '',
+  neutral: '',
+  inaccuracy: '?!',
+  mistake: '?',
+  blunder: '??',
+  '?': '·',
+};
+
+const TAG_LABEL: Record<MoveTag, string> = {
+  book: 'Book',
+  brilliant: 'Brilliant',
+  great: 'Great',
+  best: 'Best',
+  good: 'Good',
+  neutral: 'Neutral',
+  inaccuracy: 'Inaccuracy',
+  mistake: 'Mistake',
+  blunder: 'Blunder',
+  '?': 'Analyzing…',
+};
 
 export function MoveHistory({
   history,
@@ -19,6 +49,7 @@ export function MoveHistory({
   onJumpBack,
   onJumpForward,
   onJumpEnd,
+  classifications,
 }: MoveHistoryProps) {
   const rows: { num: number; white?: string; black?: string; whiteIndex: number; blackIndex: number }[] =
     [];
@@ -34,6 +65,14 @@ export function MoveHistory({
 
   const atStart = currentPly <= 0;
   const atEnd = currentPly >= history.length;
+
+  const tagFor = (ply: number): MoveTag | null => {
+    if (!classifications) return null;
+    const c = classifications[ply - 1];
+    if (!c) return null;
+    if (c.classification.tag === '?') return null;
+    return c.classification.tag;
+  };
 
   return (
     <div className="move-history">
@@ -80,24 +119,36 @@ export function MoveHistory({
       </div>
       <div className="move-list">
         {rows.length === 0 && <div className="empty">No moves yet</div>}
-        {rows.map((r) => (
-          <div key={r.num} className="move-row">
-            <span className="move-num">{r.num}.</span>
-            <button
-              className={`move-cell ${currentPly === r.whiteIndex ? 'active' : ''} ${currentPly > r.whiteIndex ? 'past' : ''}`}
-              onClick={() => onJumpTo(r.whiteIndex)}
-            >
-              {r.white ?? ''}
-            </button>
-            <button
-              className={`move-cell ${currentPly === r.blackIndex ? 'active' : ''} ${currentPly > r.blackIndex ? 'past' : ''}`}
-              disabled={!r.black}
-              onClick={() => r.black !== undefined && onJumpTo(r.blackIndex)}
-            >
-              {r.black ?? ''}
-            </button>
-          </div>
-        ))}
+        {rows.map((r) => {
+          const wTag = tagFor(r.whiteIndex + 1);
+          const bTag = tagFor(r.blackIndex + 1);
+          return (
+            <div key={r.num} className="move-row">
+              <span className="move-num">{r.num}.</span>
+              <button
+                className={`move-cell ${currentPly === r.whiteIndex + 1 ? 'active' : ''} ${currentPly > r.whiteIndex + 1 ? 'past' : ''}`}
+                onClick={() => onJumpTo(r.whiteIndex + 1)}
+                title={
+                  wTag
+                    ? `${r.white} — ${TAG_LABEL[wTag]}`
+                    : r.white
+                }
+              >
+                <span className="move-text">{r.white ?? ''}</span>
+                {wTag && <span className={`move-tag tag-${wTag}`}>{TAG_GLYPH[wTag]}</span>}
+              </button>
+              <button
+                className={`move-cell ${currentPly === r.blackIndex + 1 ? 'active' : ''} ${currentPly > r.blackIndex + 1 ? 'past' : ''}`}
+                disabled={!r.black}
+                onClick={() => r.black !== undefined && onJumpTo(r.blackIndex + 1)}
+                title={bTag ? `${r.black} — ${TAG_LABEL[bTag]}` : r.black}
+              >
+                <span className="move-text">{r.black ?? ''}</span>
+                {bTag && <span className={`move-tag tag-${bTag}`}>{TAG_GLYPH[bTag]}</span>}
+              </button>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

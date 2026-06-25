@@ -272,6 +272,14 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
               />
             </div>
             <div className="setting-row">
+              <label>Show move notation on board</label>
+              <input
+                type="checkbox"
+                checked={draft.moveNotationOnBoard}
+                onChange={(e) => updateDraft({ moveNotationOnBoard: e.target.checked })}
+              />
+            </div>
+            <div className="setting-row">
               <label>Show eval bar</label>
               <input
                 type="checkbox"

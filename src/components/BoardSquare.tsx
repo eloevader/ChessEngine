@@ -13,6 +13,15 @@ interface SquareProps {
   isLastMoveFrom: boolean;
   isLastMoveTo: boolean;
   isCheck: boolean;
+  isPreMoveFrom?: boolean;
+  isPreMoveTo?: boolean;
+  /** Optional small label drawn over the piece (e.g. the source or
+   *  destination square of the last move). */
+  moveLabel?: string;
+  /** Optional annotation tag for the move that just landed on this
+   *  square (e.g. "brilliant", "great", "blunder"). Rendered as
+   *  a colored glyph over the piece. */
+  moveTag?: { tag: string; label: string } | null;
   coordDisplay: CoordDisplay;
   onSquareClick: (square: Square) => void;
   onSquareRightDown: (square: Square, e: ReactMouseEvent) => void;
@@ -22,7 +31,22 @@ interface SquareProps {
   onDragEnd: () => void;
   onPieceTouchStart: (square: Square, piece: Piece, e: React.TouchEvent) => void;
   onPieceTouchMove: (square: Square, e: React.TouchEvent) => void;
-  onPieceTouchEnd: () => void;
+  onPieceTouchEnd: (square: Square) => void;
+}
+
+function tagGlyph(tag: string): string {
+  switch (tag) {
+    case 'brilliant': return '!!';
+    case 'great': return '!';
+    case 'best': return '★';
+    case 'book': return '📖';
+    case 'good': return '';
+    case 'inaccuracy': return '?!';
+    case 'mistake': return '?';
+    case 'blunder': return '??';
+    case 'neutral': return '';
+    default: return '';
+  }
 }
 
 function inCellCoords(square: Square, mode: CoordDisplay): { tl?: string; br?: string } {
@@ -59,7 +83,7 @@ function inCellCoords(square: Square, mode: CoordDisplay): { tl?: string; br?: s
   }
   if (onBottomEdge) {
     if (out.br === undefined) out.br = rankLabel;
-    else out.br = `${rankLabel}${out.br}`;
+    else out.br = `${out.br}${rankLabel}`;
   }
   // In 'all' mode, also show the file+rank on every interior cell (small).
   if (mode === 'all' && !onLeftEdge && !onRightEdge && !onTopEdge && !onBottomEdge) {
@@ -79,6 +103,10 @@ export function BoardSquare(props: SquareProps) {
     isLastMoveFrom,
     isLastMoveTo,
     isCheck,
+    isPreMoveFrom,
+    isPreMoveTo,
+    moveLabel,
+    moveTag,
     coordDisplay,
     onSquareClick,
     onSquareRightDown,
@@ -95,6 +123,8 @@ export function BoardSquare(props: SquareProps) {
   const classes: string[] = ['square', light ? 'light' : 'dark'];
   if (settings.highlightLastMove && (isLastMoveFrom || isLastMoveTo)) classes.push('last-move');
   if (settings.highlightCheck && isCheck && piece && piece.type === 'k') classes.push('in-check');
+  if (isPreMoveFrom) classes.push('pre-move-from');
+  if (isPreMoveTo) classes.push('pre-move-to');
 
   const pieceClasses: string[] = ['piece', `piece-${piece?.color ?? 'w'}`];
   if (isSelected) pieceClasses.push('selected');
@@ -134,6 +164,19 @@ export function BoardSquare(props: SquareProps) {
           {inCell.br}
         </span>
       )}
+      {moveLabel && (
+        <span className={`move-on-board ${isLight ? 'on-light' : 'on-dark'}`}>
+          {moveLabel}
+        </span>
+      )}
+      {moveTag && (
+        <span
+          className={`move-annotation tag-${moveTag.tag} ${isLight ? 'on-light' : 'on-dark'}`}
+          title={moveTag.label}
+        >
+          {tagGlyph(moveTag.tag)}
+        </span>
+      )}
       {piece && (
         <img
           className={pieceClasses.join(' ')}
@@ -161,8 +204,8 @@ export function BoardSquare(props: SquareProps) {
           onDragEnd={onDragEnd}
           onTouchStart={(e) => onPieceTouchStart(square, piece, e)}
           onTouchMove={(e) => onPieceTouchMove(square, e)}
-          onTouchEnd={onPieceTouchEnd}
-          onTouchCancel={onPieceTouchEnd}
+          onTouchEnd={() => onPieceTouchEnd(square)}
+          onTouchCancel={() => onPieceTouchEnd(square)}
         />
       )}
       {showLegalHint && (

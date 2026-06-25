@@ -22,6 +22,11 @@ interface BoardProps {
   /** Right-click-on-square highlights (single square, no drag). */
   squareHighlights: Map<Square, ArrowColor>;
   arrowColor: ArrowColor;
+  /** Pre-move indicator (from + to, dashed). */
+  preMove?: { from: Square; to: Square } | null;
+  /** Optional annotation for the move that landed on a given square.
+   *  Map keyed by destination square (e.g. "e4"). */
+  moveTagsByTo?: Map<Square, { tag: string; label: string }>;
   onArrowDraw: (from: Square, to: Square, color: ArrowColor) => void;
   onArrowEraseAt: (square: Square) => void;
   onSquareRightClick: (square: Square, color: ArrowColor) => void;
@@ -65,6 +70,8 @@ export function Board(props: BoardProps) {
     arrows,
     squareHighlights,
     arrowColor,
+    preMove,
+    moveTagsByTo,
     onArrowDraw,
     onArrowEraseAt,
     onSquareRightClick,
@@ -135,65 +142,79 @@ export function Board(props: BoardProps) {
   }, []);
 
   // Track right-button mouse globally while a drag is in progress.
-  // We attach these listeners ONCE per draft, on the document, and use
-  // refs to read the latest state.
-  useEffect(() => {
-    if (!arrowDraft) return;
-    const startX = arrowDraft.pointerX;
-    const startY = arrowDraft.pointerY;
-    const fromSq = arrowDraft.from;
-    let dragged = false;
-    const onMove = (e: MouseEvent) => {
-      if (e.buttons !== 2) {
-        finalize(e.clientX, e.clientY);
-        return;
-      }
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-      if (Math.hypot(dx, dy) > 6) dragged = true;
-      // Update the live preview by mutating the ref-backed state. The
-      // ref makes the read in the document listener always see "now".
-      arrowDraftRef.current = { from: fromSq, pointerX: e.clientX, pointerY: e.clientY };
-      setArrowDraft({ from: fromSq, pointerX: e.clientX, pointerY: e.clientY });
-    };
-    const onUp = (e: MouseEvent) => finalize(e.clientX, e.clientY);
-    const finalize = (clientX: number, clientY: number) => {
-      const target = squareAtClientPoint(clientX, clientY);
-      const from = arrowDraftRef.current?.from ?? fromSq;
-      if (dragged && target && target !== from) {
-        onArrowDrawRef.current(from, target, arrowColorRef.current);
-      } else if (!dragged && target) {
-        // Single right-click (no drag): toggle a square highlight with
-        // the currently selected arrow color. If the same square+color
-        // is already highlighted, remove it.
-        onSquareRightClickRef.current(target, arrowColorRef.current);
-      } else if (dragged && target === from) {
-        // Right-drag that ended on the same square: erase arrows at it.
-        onArrowEraseAtRef.current(target);
-      }
-      setArrowDraft(null);
-      arrowDraftRef.current = null;
-    };
-    const onContextMenu = (e: MouseEvent) => e.preventDefault();
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-    document.addEventListener('contextmenu', onContextMenu);
-    return () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      document.removeEventListener('contextmenu', onContextMenu);
-    };
-  }, [arrowDraft, squareAtClientPoint]);
-
+  //
+  // Behavior (chess.com style):
+  //   - Right-DRAG from square A to square B (any motion) → draw an
+  //     arrow A→B in the currently selected color.
+  //   - Right-CLICK (no movement) on a square → fill that square with
+  //     the currently selected color (toggle if same color+square).
+  //
+  // Implementation: listeners are attached SYNCHRONOUSLY in
+  // `handleSquareRightDown` (not via useEffect), so a fast mousedown →
+  // mouseup can never lose the drag — there is no "effect hasn't run
+  // yet" window.
+  const DRAG_THRESHOLD_PX = 4;
   const handleSquareRightDown = useCallback(
     (square: Square, e: ReactMouseEvent) => {
       if (e.button !== 2) return;
       e.preventDefault();
-      const draft = { from: square, pointerX: e.clientX, pointerY: e.clientY };
-      setArrowDraft(draft);
+      e.stopPropagation();
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const fromSq = square;
+      let dragged = false;
+      let cancelled = false;
+
+      // Live preview state. Stored in a ref + a state var so the
+      // preview layer re-renders as the pointer moves.
+      const draft = { from: fromSq, pointerX: startX, pointerY: startY };
       arrowDraftRef.current = draft;
+      setArrowDraft(draft);
+
+      const finalize = (clientX: number, clientY: number) => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        document.removeEventListener('contextmenu', onContext);
+        if (cancelled) return;
+        const target = squareAtClientPoint(clientX, clientY);
+        if (dragged) {
+          // Drag completed. Only produce an arrow if the user released
+          // over a DIFFERENT square.
+          if (target && target !== fromSq) {
+            onArrowDrawRef.current(fromSq, target, arrowColorRef.current);
+          }
+        } else {
+          // Pointer didn't move past the drag threshold → treat as a
+          // single right-click: fill the target square with the
+          // currently selected color.
+          if (target) {
+            onSquareRightClickRef.current(target, arrowColorRef.current);
+          }
+        }
+        setArrowDraft(null);
+        arrowDraftRef.current = null;
+      };
+      const onMove = (ev: MouseEvent) => {
+        if (ev.buttons !== 2) {
+          cancelled = true;
+          finalize(ev.clientX, ev.clientY);
+          return;
+        }
+        const dx = ev.clientX - startX;
+        const dy = ev.clientY - startY;
+        if (Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) dragged = true;
+        const next = { from: fromSq, pointerX: ev.clientX, pointerY: ev.clientY };
+        arrowDraftRef.current = next;
+        setArrowDraft(next);
+      };
+      const onUp = (ev: MouseEvent) => finalize(ev.clientX, ev.clientY);
+      const onContext = (ev: MouseEvent) => ev.preventDefault();
+
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+      document.addEventListener('contextmenu', onContext);
     },
-    [],
+    [squareAtClientPoint],
   );
 
   // -------- Touch drag (mobile) --------
@@ -385,6 +406,18 @@ export function Board(props: BoardProps) {
               isLastMoveFrom={lastMove?.from === square}
               isLastMoveTo={lastMove?.to === square}
               isCheck={kingInCheck === square}
+              isPreMoveFrom={preMove?.from === square}
+              isPreMoveTo={preMove?.to === square}
+              moveLabel={
+                settings.moveNotationOnBoard
+                  ? lastMove?.from === square
+                    ? (lastMove.from as string)
+                    : lastMove?.to === square
+                      ? (lastMove.to as string)
+                      : undefined
+                  : undefined
+              }
+              moveTag={moveTagsByTo?.get(square) ?? null}
               coordDisplay={settings.coordDisplay}
               onSquareClick={onSquareClick}
               onSquareRightDown={handleSquareRightDown}
@@ -416,6 +449,7 @@ export function Board(props: BoardProps) {
                 : null
             }
           />
+          {preMove && <PreMoveArrow preMove={preMove} orientation={orientation} />}
           {touchDrag && (
             <div
               className="touch-ghost"
@@ -598,6 +632,90 @@ function SquareHighlights({ highlights, orientation }: SquareHighlightsProps) {
       }}
     >
       {out}
+    </svg>
+  );
+}
+
+/** Renders the dashed pre-move arrow (and highlights on its from/to
+ *  squares already come from BoardSquare's isPreMoveFrom / isPreMoveTo
+ *  props). */
+function PreMoveArrow({
+  preMove,
+  orientation,
+}: {
+  preMove: { from: Square; to: Square };
+  orientation: 'w' | 'b';
+}) {
+  const [size, setSize] = useState(0);
+  const [board, setBoard] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    const el = document.querySelector('.board') as HTMLElement | null;
+    if (!el) return;
+    setBoard(el);
+    const update = () => setSize(el.getBoundingClientRect().width);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  if (!board || size === 0) return null;
+  const cell = size / 8;
+  const f1 = preMove.from.charCodeAt(0) - 97;
+  const r1 = parseInt(preMove.from[1], 10) - 1;
+  const f2 = preMove.to.charCodeAt(0) - 97;
+  const r2 = parseInt(preMove.to[1], 10) - 1;
+  const fVis1 = orientation === 'w' ? f1 : 7 - f1;
+  const rVis1 = orientation === 'w' ? 7 - r1 : r1;
+  const fVis2 = orientation === 'w' ? f2 : 7 - f2;
+  const rVis2 = orientation === 'w' ? 7 - r2 : r2;
+  const x1 = (fVis1 + 0.5) * cell;
+  const y1 = (rVis1 + 0.5) * cell;
+  const x2 = (fVis2 + 0.5) * cell;
+  const y2 = (rVis2 + 0.5) * cell;
+  // Shorten the head
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len = Math.hypot(dx, dy) || 1;
+  const headInset = cell * 0.22;
+  const ex = x2 - (dx / len) * headInset;
+  const ey = y2 - (dy / len) * headInset;
+  return (
+    <svg
+      style={{
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        width: '100%',
+        height: '100%',
+        pointerEvents: 'none',
+        zIndex: 4,
+        overflow: 'visible',
+      }}
+    >
+      <defs>
+        <marker
+          id="premove-arrowhead"
+          viewBox="0 0 10 10"
+          refX="5"
+          refY="5"
+          markerWidth={4}
+          markerHeight={4}
+          orient="auto-start-reverse"
+        >
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(180, 180, 180, 0.9)" />
+        </marker>
+      </defs>
+      <line
+        x1={x1}
+        y1={y1}
+        x2={ex}
+        y2={ey}
+        stroke="rgba(180, 180, 180, 0.85)"
+        strokeWidth={cell * 0.14}
+        strokeLinecap="round"
+        strokeDasharray={`${cell * 0.22} ${cell * 0.16}`}
+        markerEnd="url(#premove-arrowhead)"
+      />
     </svg>
   );
 }

@@ -156,7 +156,7 @@ interface ComputeContext {
 
 function buildThreatsFrom(
   ctx: ComputeContext,
-  movedSquare: Square | null,
+  _movedSquare: Square | null,
 ): LiveAttackResult {
   const { board, onlyColor, onlySquare } = ctx;
   const descriptions: AttackDescription[] = [];
@@ -192,20 +192,50 @@ function buildThreatsFrom(
     }
   }
 
-  const arrowColor: ArrowColor = movedSquare
-    ? ((ctx.onlyColor ?? 'w') === 'w' ? 'blue' : 'red')
-    : 'green';
-  const arrows: Arrow[] = descriptions.map((d) => ({
+  // In 'lastMove' scope, every attack MUST originate from the moved
+  // square. Pin the expected attacker color to whatever is actually on
+  // that square right now, then drop any description whose attacker
+  // square OR color disagrees — a final defense-in-depth guard so a
+  // single move can never produce arrows of the wrong color or from
+  // a different piece.
+  const expectedAttackerColor: 'w' | 'b' | null = (() => {
+    if (onlySquare) {
+      const tc = squareToCoords(onlySquare);
+      const trow = 7 - tc.r;
+      const tcol = tc.f;
+      const p = board[trow]?.[tcol] ?? null;
+      if (p) return p.color;
+    }
+    if (onlyColor) return onlyColor;
+    return null;
+  })();
+  const filteredDescriptions = descriptions.filter((d) => {
+    if (onlySquare && d.attackerSquare !== onlySquare) return false;
+    if (
+      onlySquare &&
+      expectedAttackerColor &&
+      d.attackerColor !== expectedAttackerColor
+    ) {
+      return false;
+    }
+    return true;
+  });
+  const arrows: Arrow[] = filteredDescriptions.map((d) => ({
     from: d.attackerSquare,
     to: d.targetSquare,
-    color: d.attackerColor === 'w' ? 'blue' : 'red',
+    // Threat arrows are always red for both sides — the user-facing rule
+    // is simply "this piece is under attack by the piece that just
+    // moved", and a single uniform color is easier to read at a glance
+    // than side-coded colors.
+    color: 'red',
     auto: true,
   }));
 
-  // Suppress unused-var warning on arrowColor (kept for clarity / future).
-  void arrowColor;
+  // Suppress unused-var warning on expectedAttackerColor (kept for the
+  // guard above; future scope logic may want it).
+  void expectedAttackerColor;
 
-  return { arrows, descriptions };
+  return { arrows, descriptions: filteredDescriptions };
 }
 
 // ---------- Live attack tracker (the ONLY rule) ----------

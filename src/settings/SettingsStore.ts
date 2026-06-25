@@ -36,6 +36,9 @@ export interface Settings {
   /** Which threats to show when showThreats is on. 'lastMove' = only the
    *  piece that just moved. 'board' = every attack by either side. */
   threatScope: 'lastMove' | 'board';
+  /** Show a small "from"/"to" label on the source and destination
+   *  squares of the last move (chess.com-style). */
+  moveNotationOnBoard: boolean;
 }
 
 const STORAGE_KEY = 'chess-analyzer.settings.v7';
@@ -74,6 +77,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showAnalysisLines: false,
   showThreats: true,
   threatScope: 'lastMove',
+  moveNotationOnBoard: true,
 };
 
 function loadSettings(): Settings {

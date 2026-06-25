@@ -23,9 +23,9 @@ function squareCenter(
 
 /** For a knight move, return an L-shaped path: from → corner → to.
  *  For straight-line moves (orthogonal or diagonal), return a single segment.
- *  The L goes "vertically" (along the file / x axis) first, then "horizontally"
- *  (along the rank / y axis). So the elbow sits at (to.x, from.y): the
- *  piece steps along the file to the target's file, then along the rank. */
+ *  The L goes RANK-FIRST (vertical, then horizontal) so it forms a "7"
+ *  shape: the piece first moves 2 ranks, then 1 file. The elbow sits
+ *  at (from.x, to.y) — the target's rank but the start's file. */
 function buildPath(
   from: { x: number; y: number },
   to: { x: number; y: number },
@@ -34,15 +34,15 @@ function buildPath(
   if (pieceKind === 'other') {
     return `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
   }
-  // Knight: file-first L. Elbow at (to.x, from.y).
-  // If the file segment would be zero (same file), fall back to rank-first
-  // to avoid a zero-length segment.
-  if (Math.abs(to.x - from.x) < 0.5) {
-    // Same file → rank-first: (from.x, from.y) → (from.x, to.y) → (to.x, to.y)
-    return `M ${from.x} ${from.y} L ${from.x} ${to.y} L ${to.x} ${to.y}`;
+  // Knight: rank-first ("7" shape). Elbow at (from.x, to.y).
+  // If the rank segment would be zero (same rank), fall back to
+  // file-first to avoid a zero-length segment.
+  if (Math.abs(to.y - from.y) < 0.5) {
+    // Same rank → file-first: (from.x, from.y) → (to.x, from.y) → (to.x, to.y)
+    return `M ${from.x} ${from.y} L ${to.x} ${from.y} L ${to.x} ${to.y}`;
   }
-  // File-first: (from.x, from.y) → (to.x, from.y) → (to.x, to.y)
-  return `M ${from.x} ${from.y} L ${to.x} ${from.y} L ${to.x} ${to.y}`;
+  // Rank-first: (from.x, from.y) → (from.x, to.y) → (to.x, to.y)
+  return `M ${from.x} ${from.y} L ${from.x} ${to.y} L ${to.x} ${to.y}`;
 }
 
 export function ArrowLayer({ arrows, orientation, preview }: ArrowLayerProps) {

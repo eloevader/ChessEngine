@@ -1,3 +1,8 @@
+// Stockfish bridge client. Opens a WebSocket to ws://localhost:8765
+// (the stockfish-bridge.js server) and exposes a UCI-compatible
+// interface: sendCommand() for any UCI string, onMessage() for every
+// line the engine writes.
+
 export interface EngineLine {
   multipv: number;
   depth: number;
@@ -23,128 +28,187 @@ export type EngineMessage =
   | { type: 'ready' }
   | { type: 'bestmove'; move: string; ponder?: string }
   | { type: 'info'; lines: EngineLine[] }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  | { type: 'status'; status: 'connecting' | 'connected' | 'disconnected' };
 
-interface EngineState {
-  worker: Worker | null;
-  ready: boolean;
-  initPromise: Promise<void> | null;
-  initResolvers: Array<() => void>;
-  listeners: EngineListener[];
-  currentFen: string;
-  level: EngineOptions['level'];
-}
-
-// Engine strength levels (time + skill) — level 1 weakest, 8 strongest
-// Based on Lichess-style mapping.
-export const LEVEL_CONFIG: Record<EngineOptions['level'], { skill: number; movetime: number; depth?: number }> = {
-  1: { skill: 0, movetime: 100 },
-  2: { skill: 3, movetime: 200 },
-  3: { skill: 6, movetime: 400 },
-  4: { skill: 10, movetime: 700 },
-  5: { skill: 14, movetime: 1000 },
-  6: { skill: 18, movetime: 1500 },
-  7: { skill: 20, movetime: 2500 },
-  8: { skill: 20, movetime: 4000, depth: 22 },
+// Engine strength levels (time + skill). Movetime is the *minimum*
+// time Stockfish gets to think per move. We use a slightly higher
+// floor than the raw "best for this level" because Stockfish at
+// very short movetimes tends to play junk that gets stomped on
+// the very next move, and the user sees a chaotic game. With these
+// minimums the weakest level is still recognizable chess and the
+// strongest has time to actually find good moves.
+export const LEVEL_CONFIG: Record<
+  EngineOptions['level'],
+  { skill: number; movetime: number; depth?: number }
+> = {
+  1: { skill: 0, movetime: 1500 },
+  2: { skill: 3, movetime: 1500 },
+  3: { skill: 6, movetime: 2000 },
+  4: { skill: 10, movetime: 2500 },
+  5: { skill: 14, movetime: 3000 },
+  6: { skill: 18, movetime: 4000 },
+  7: { skill: 20, movetime: 5000 },
+  8: { skill: 20, movetime: 7000, depth: 22 },
 };
 
+const DEFAULT_URL = 'ws://localhost:8765';
+
 export class StockfishEngine {
-  private state: EngineState = {
-    worker: null,
-    ready: false,
-    initPromise: null,
-    initResolvers: [],
-    listeners: [],
-    currentFen: '',
-    level: 4,
-  };
+  private ws: WebSocket | null = null;
+  private ready = false;
+  private listeners: EngineListener[] = [];
+  private initPromise: Promise<void> | null = null;
+  private initResolvers: Array<() => void> = [];
+  private initRejecters: Array<(err: Error) => void> = [];
+  private level: EngineOptions['level'] = 4;
+  private commandQueue: string[] = [];
+  private url: string;
+  private reconnectTimer: number | null = null;
+
+  constructor(url: string = DEFAULT_URL) {
+    this.url = url;
+  }
 
   isReady(): boolean {
-    return this.state.ready;
+    return this.ready;
   }
 
   onMessage(fn: EngineListener): () => void {
-    this.state.listeners.push(fn);
+    this.listeners.push(fn);
     return () => {
-      this.state.listeners = this.state.listeners.filter((l) => l !== fn);
+      this.listeners = this.listeners.filter((l) => l !== fn);
     };
   }
 
   private emit(msg: EngineMessage) {
-    this.state.listeners.forEach((l) => l(msg));
+    this.listeners.forEach((l) => l(msg));
   }
 
   async init(): Promise<void> {
-    if (this.state.worker) return;
-    if (this.state.initPromise) return this.state.initPromise;
+    if (this.ws && this.ready) return;
+    if (this.initPromise) return this.initPromise;
 
-    this.state.initPromise = new Promise<void>((resolve) => {
-      this.state.initResolvers.push(resolve);
-      const worker = new Worker(new URL('./stockfishWorker.ts', import.meta.url));
-      this.state.worker = worker;
-      worker.onmessage = (e: MessageEvent) => this.handle(e.data);
-      worker.onerror = (e) => {
-        this.emit({ type: 'error', message: e.message || 'Engine error' });
-      };
-      worker.postMessage('uci');
+    this.initPromise = new Promise<void>((resolve, reject) => {
+      this.initResolvers.push(resolve);
+      this.initRejecters.push(reject);
+      this.connect();
     });
 
-    return this.state.initPromise;
+    return this.initPromise;
   }
 
-  private handle(data: unknown) {
-    const text = typeof data === 'string' ? data : '';
-    if (!text) return;
-    const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
-    for (const line of lines) this.processLine(line);
+  private connect() {
+    this.emit({ type: 'status', status: 'connecting' });
+    try {
+      this.ws = new WebSocket(this.url);
+    } catch (err) {
+      this.failInit(new Error(`WebSocket connect failed: ${(err as Error).message}`));
+      return;
+    }
+    this.ws.onopen = () => {
+      this.emit({ type: 'status', status: 'connected' });
+      // Send UCI handshake.
+      this.sendRaw('uci');
+    };
+    this.ws.onmessage = (ev) => {
+      const text = typeof ev.data === 'string' ? ev.data : '';
+      if (!text) return;
+      const lines = text.split(/\r?\n/).filter(Boolean);
+      for (const line of lines) this.processLine(line);
+    };
+    this.ws.onerror = () => {
+      // The 'error' event has no useful info. The 'close' event will
+      // fire next with a code.
+    };
+    this.ws.onclose = () => {
+      this.emit({ type: 'status', status: 'disconnected' });
+      this.ready = false;
+      this.ws = null;
+      if (this.initPromise && this.initResolvers.length === 0) {
+        // engine was previously ready; schedule a reconnect
+        this.scheduleReconnect();
+      } else if (this.initResolvers.length > 0) {
+        this.failInit(
+          new Error(
+            'Could not connect to Stockfish bridge at ' +
+              this.url +
+              '. Make sure stockfish-bridge.js is running.',
+          ),
+        );
+      }
+    };
+  }
+
+  private failInit(err: Error) {
+    const rejecters = this.initRejecters;
+    this.initResolvers = [];
+    this.initRejecters = [];
+    this.initPromise = null;
+    for (const r of rejecters) r(err);
+    this.emit({ type: 'error', message: err.message });
+  }
+
+  private scheduleReconnect() {
+    if (this.reconnectTimer !== null) return;
+    this.reconnectTimer = window.setTimeout(() => {
+      this.reconnectTimer = null;
+      if (!this.ready) this.init().catch(() => {});
+    }, 2000);
   }
 
   private processLine(line: string) {
     if (line === 'uciok') {
       this.applyConfig();
-      this.state.worker?.postMessage('isready');
+      this.sendRaw('isready');
       return;
     }
     if (line === 'readyok') {
-      this.state.ready = true;
-      const resolvers = this.state.initResolvers;
-      this.state.initResolvers = [];
-      resolvers.forEach((r) => r());
-      this.emit({ type: 'ready' });
+      if (!this.ready) {
+        this.ready = true;
+        const resolvers = this.initResolvers;
+        this.initResolvers = [];
+        this.initRejecters = [];
+        for (const r of resolvers) r();
+        this.emit({ type: 'ready' });
+        // Flush any commands queued before init.
+        for (const cmd of this.commandQueue) this.sendRaw(cmd);
+        this.commandQueue = [];
+      }
       return;
     }
     if (line.startsWith('bestmove')) {
       const parts = line.split(/\s+/);
       const move = parts[1] ?? '';
-      const ponder = parts[3] ?? undefined;
+      const ponder = parts[3];
       this.emit({ type: 'bestmove', move, ponder });
       return;
     }
     if (line.startsWith('info ')) {
       const parsed = parseInfo(line);
       if (parsed.length) this.emit({ type: 'info', lines: parsed });
+      return;
     }
   }
 
   private applyConfig() {
-    const w = this.state.worker;
-    if (!w) return;
-    w.postMessage('setoption name UCI_LimitStrength value false');
-    const cfg = LEVEL_CONFIG[this.state.level];
-    w.postMessage(`setoption name Skill Level value ${cfg.skill}`);
-    w.postMessage('setoption name UCI_Elo value 1500');
+    this.sendRaw('setoption name UCI_LimitStrength value false');
+    this.sendRaw('setoption name UCI_Elo value 1500');
+    const cfg = LEVEL_CONFIG[this.level];
+    this.sendRaw(`setoption name Skill Level value ${cfg.skill}`);
   }
 
   setLevel(level: EngineOptions['level']) {
-    this.state.level = level;
-    if (this.state.ready) this.applyConfig();
+    this.level = level;
+    if (this.ready) {
+      this.sendRaw(`setoption name Skill Level value ${LEVEL_CONFIG[level].skill}`);
+    }
   }
 
   async setPosition(fen: string, moves: string[] = []): Promise<void> {
     await this.init();
-    this.state.currentFen = fen;
     const moveStr = moves.length ? ' moves ' + moves.join(' ') : '';
-    this.state.worker!.postMessage(`position fen ${fen}${moveStr}`);
+    this.sendRaw(`position fen ${fen}${moveStr}`);
   }
 
   async go(options: EngineOptions = { level: 4 }): Promise<void> {
@@ -155,19 +219,83 @@ export class StockfishEngine {
     if (options.multiPv && options.multiPv > 1) parts.push(`multipv ${options.multiPv}`);
     parts.push(`movetime ${cfg.movetime}`);
     if (cfg.depth) parts.push(`depth ${cfg.depth}`);
-    this.state.worker!.postMessage(parts.join(' '));
+    this.sendRaw(parts.join(' '));
   }
 
   async stop(): Promise<void> {
-    if (!this.state.worker) return;
-    this.state.worker.postMessage('stop');
+    if (this.ws && this.ready) {
+      this.sendRaw('stop');
+    }
+  }
+
+  /** One-shot evaluation: ask the engine to think for `movetime`
+   *  ms and resolve with the best move + score. Used by the move
+   *  classifier to evaluate historical positions. */
+  async evalOnce(
+    fen: string,
+    movetime: number,
+  ): Promise<{ bestMove: string; scoreCp: number | null; scoreMate: number | null }> {
+    await this.init();
+    await this.stop();
+    return new Promise((resolve) => {
+      let resolved = false;
+      const off = this.onMessage((msg) => {
+        if (msg.type === 'info' && msg.lines.length > 0) {
+          const pv1 = msg.lines.find((l) => l.multipv === 1) ?? msg.lines[0];
+          // Stash the latest info; resolve when bestmove arrives.
+          latestInfo = { pv1 };
+        } else if (msg.type === 'bestmove') {
+          if (resolved) return;
+          resolved = true;
+          off();
+          resolve({
+            bestMove: msg.move,
+            scoreCp: latestInfo?.pv1?.scoreCp ?? null,
+            scoreMate: latestInfo?.pv1?.scoreMate ?? null,
+          });
+        }
+      });
+      let latestInfo: { pv1: { scoreCp: number | null; scoreMate: number | null; pv: string[] } } | null = null;
+      this.setPosition(fen).catch(() => {});
+      this.sendRaw(`go movetime ${movetime}`);
+      // Safety timeout: if bestmove never comes (e.g. bridge
+      // offline), resolve with a best-effort fallback.
+      window.setTimeout(() => {
+        if (resolved) return;
+        resolved = true;
+        off();
+        resolve({
+          bestMove: latestInfo?.pv1?.pv?.[0] ?? '',
+          scoreCp: latestInfo?.pv1?.scoreCp ?? null,
+          scoreMate: latestInfo?.pv1?.scoreMate ?? null,
+        });
+      }, movetime + 1500);
+    });
   }
 
   destroy() {
-    this.state.worker?.terminate();
-    this.state.worker = null;
-    this.state.ready = false;
-    this.state.initPromise = null;
+    if (this.reconnectTimer !== null) {
+      window.clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    try {
+      this.ws?.close();
+    } catch {}
+    this.ws = null;
+    this.ready = false;
+    this.listeners = [];
+  }
+
+  private sendRaw(cmd: string) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      this.commandQueue.push(cmd);
+      return;
+    }
+    try {
+      this.ws.send(cmd + '\n');
+    } catch (err) {
+      this.commandQueue.push(cmd);
+    }
   }
 }
 
@@ -183,7 +311,6 @@ function parseInfo(line: string): EngineLine[] {
   const nps = parseInt(get('nps') ?? '0', 10);
   const timeMs = parseInt(get('time') ?? '0', 10);
   const nodes = parseInt(get('nodes') ?? '0', 10);
-
   const scoreIdx = tokens.indexOf('score');
   let scoreCp: number | null = null;
   let scoreMate: number | null = null;
@@ -193,6 +320,5 @@ function parseInfo(line: string): EngineLine[] {
   }
   const pvIdx = tokens.indexOf('pv');
   const pv = pvIdx >= 0 ? tokens.slice(pvIdx + 1) : [];
-
   return [{ multipv, depth, seldepth, scoreCp, scoreMate, pv, nps, timeMs, nodes }];
 }

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StockfishEngine, type EngineLine, type EngineMessage } from './StockfishEngine';
-import { fetchLichessEval } from './lichessCloud';
+import { StockfishEngine, type EngineLine } from './StockfishEngine';
 
 export type EngineStatus = 'idle' | 'loading' | 'ready' | 'thinking' | 'error';
 
@@ -9,20 +8,22 @@ export interface UseEngineReturn {
   error: string | null;
   bestLine: EngineLine | null;
   allLines: EngineLine[];
-  /** Score from the latest evaluation (cp or mate). */
   scoreCp: number | null;
   scoreMate: number | null;
-  /** Request the engine to think about a position. */
-  requestEval: (fen: string, level: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8) => void;
-  /** Stop any in-progress evaluation. */
-  stop: () => void;
-  /** Whether the user is currently playing against the engine. */
   bestMove: string | null;
+  requestEval: (fen: string, level: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8) => void;
+  /** One-shot evaluation of an arbitrary FEN. */
+  evalPosition: (fen: string) => Promise<{
+    bestMove: string;
+    scoreCp: number | null;
+    scoreMate: number | null;
+  }>;
+  stop: () => void;
   clearBestMove: () => void;
 }
 
 export function useEngine(): UseEngineReturn {
-  const [status, setStatus] = useState<EngineStatus>('idle');
+  const [status, setStatus] = useState<EngineStatus>('loading');
   const [error, setError] = useState<string | null>(null);
   const [bestLine, setBestLine] = useState<EngineLine | null>(null);
   const [allLines, setAllLines] = useState<EngineLine[]>([]);
@@ -34,122 +35,86 @@ export function useEngine(): UseEngineReturn {
   const debounceRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const engineAtMount = engineRef;
-    const debounceAtMount = debounceRef;
+    const eng = new StockfishEngine('ws://localhost:8765');
+    engineRef.current = eng;
+    const off = eng.onMessage((msg) => {
+      if (msg.type === 'status') {
+        if (msg.status === 'connecting') {
+          setStatus('loading');
+        } else if (msg.status === 'connected') {
+          // Wait for readyok
+        } else if (msg.status === 'disconnected') {
+          setStatus('loading');
+        }
+      } else if (msg.type === 'ready') {
+        setStatus('ready');
+        setError(null);
+      } else if (msg.type === 'error') {
+        setError(msg.message);
+        setStatus('error');
+      } else if (msg.type === 'info') {
+        const pv1 = msg.lines.find((l) => l.multipv === 1) ?? msg.lines[0];
+        setAllLines(msg.lines);
+        if (pv1) {
+          setBestLine(pv1);
+          if (pv1.scoreMate !== null) {
+            setScoreMate(pv1.scoreMate);
+            setScoreCp(null);
+          } else {
+            setScoreCp(pv1.scoreCp);
+            setScoreMate(null);
+          }
+        }
+        setStatus('thinking');
+      } else if (msg.type === 'bestmove') {
+        setStatus('ready');
+        setBestMove(msg.move);
+      }
+    });
+    // Start init
+    eng.init().catch((err) => {
+      setError((err as Error).message);
+      setStatus('error');
+    });
     return () => {
-      engineAtMount.current?.destroy();
-      if (debounceAtMount.current) window.clearTimeout(debounceAtMount.current);
+      off();
+      eng.destroy();
     };
   }, []);
 
-  // Safety timeout: if the engine doesn't respond within 15 seconds, clear
-  // the bestMove so the UI doesn't get stuck waiting.
-  useEffect(() => {
-    if (!bestMove) return;
-    const t = setTimeout(() => {
-      // If bestMove is still set after 15s, something went wrong; clear it
-      setBestMove(null);
-    }, 15000);
-    return () => clearTimeout(t);
-  }, [bestMove]);
-
-  const ensureEngine = async (): Promise<StockfishEngine> => {
-    if (engineRef.current) return engineRef.current;
-    setStatus('loading');
-    const e = new StockfishEngine();
-    e.onMessage((msg) => handleEngineMessage(msg, e));
-    try {
-      await e.init();
-      setStatus('ready');
-      return e;
-    } catch (err) {
-      setStatus('error');
-      setError((err as Error).message);
-      throw err;
-    }
-  };
-
-  const handleEngineMessage = (msg: EngineMessage, _e: StockfishEngine) => {
-    if (msg.type === 'ready') {
-      setStatus('ready');
-    } else if (msg.type === 'error') {
-      setError(msg.message);
-      setStatus('error');
-    } else if (msg.type === 'info') {
-      const pv1 = msg.lines.find((l) => l.multipv === 1) ?? msg.lines[0];
-      setAllLines(msg.lines);
-      if (pv1) {
-        setBestLine(pv1);
-        if (pv1.scoreMate !== null) {
-          setScoreMate(pv1.scoreMate);
-          setScoreCp(null);
-        } else {
-          setScoreCp(pv1.scoreCp);
-          setScoreMate(null);
-        }
-      }
-      setStatus('thinking');
-    } else if (msg.type === 'bestmove') {
-      setStatus('ready');
-      setBestMove(msg.move);
-    }
-  };
-
-  const startEngineEval = useCallback(async (fen: string, level: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8) => {
-    try {
-      const e = await ensureEngine();
-      await e.setPosition(fen);
-      setStatus('thinking');
-      await e.go({ level });
-    } catch {
-      /* already handled in ensureEngine */
-    }
-  }, []);
-
-  const requestEval = useCallback((fen: string, level: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8) => {
-    if (debounceRef.current) window.clearTimeout(debounceRef.current);
-    debounceRef.current = window.setTimeout(async () => {
-      // Kick off Stockfish immediately so the user always gets an evaluation
-      // quickly, even if Lichess cloud is slow / blocked. The first info line
-      // from Stockfish typically arrives within a few hundred ms.
-      void startEngineEval(fen, level);
-
-      // In parallel, try Lichess cloud for an instant score and best move.
-      // fetchLichessEval has its own 2.5s timeout, so this never stalls us.
+  const startEngineEval = useCallback(
+    async (fen: string, level: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8) => {
+      const e = engineRef.current;
+      if (!e) return;
       try {
-        const cloud = await fetchLichessEval(fen);
-        if (cloud && cloud.pvs && cloud.pvs.length > 0) {
-          const pv = cloud.pvs[0];
-          const pvMoves = pv.moves.split(' ').filter(Boolean);
-          setBestLine({
-            multipv: 1,
-            depth: cloud.depth,
-            seldepth: cloud.depth,
-            scoreCp: pv.cp,
-            scoreMate: pv.mate,
-            pv: pvMoves,
-            nps: 0,
-            timeMs: 0,
-            nodes: cloud.knodes * 1000,
-          });
-          if (pv.mate !== null) {
-            setScoreMate(pv.mate);
-            setScoreCp(null);
-          } else {
-            setScoreCp(pv.cp);
-            setScoreMate(null);
-          }
-          // If we got a move from the cloud, also set it as the best move
-          // so the computer can play immediately without waiting for Stockfish
-          if (pvMoves.length > 0) {
-            setBestMove(pvMoves[0]);
-          }
-        }
+        await e.setPosition(fen);
+        setStatus('thinking');
+        await e.go({ level });
       } catch {
-        /* cloud failed, Stockfish is already running */
+        // ignored; the engine emits its own error events
       }
-    }, 200) as unknown as number;
-  }, [startEngineEval]);
+    },
+    [],
+  );
+
+  const requestEval = useCallback(
+    (fen: string, level: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8) => {
+      if (debounceRef.current) window.clearTimeout(debounceRef.current);
+      debounceRef.current = window.setTimeout(() => {
+        void startEngineEval(fen, level);
+      }, 150) as unknown as number;
+    },
+    [startEngineEval],
+  );
+
+  const evalPosition = useCallback(
+    (fen: string) => {
+      const e = engineRef.current;
+      if (!e) return Promise.resolve({ bestMove: '', scoreCp: null, scoreMate: null });
+      return e.evalOnce(fen, 250);
+    },
+    [],
+  );
 
   const stop = useCallback(async () => {
     if (debounceRef.current) {
@@ -157,15 +122,11 @@ export function useEngine(): UseEngineReturn {
       debounceRef.current = null;
     }
     if (engineRef.current) await engineRef.current.stop();
-    setStatus('ready');
+    setStatus((s) => (s === 'thinking' ? 'ready' : s));
   }, []);
 
   const clearBestMove = useCallback(() => setBestMove(null), []);
 
-  // Memoize the returned object so its identity is stable across renders
-  // (when none of the underlying state changes). Otherwise consumers using
-  // it in a useEffect dependency array will refire on every render and
-  // keep restarting the engine evaluation.
   return useMemo(
     () => ({
       status,
@@ -175,10 +136,23 @@ export function useEngine(): UseEngineReturn {
       scoreCp,
       scoreMate,
       requestEval,
+      evalPosition,
       stop,
       bestMove,
       clearBestMove,
     }),
-    [status, error, bestLine, allLines, scoreCp, scoreMate, requestEval, stop, bestMove, clearBestMove],
+    [
+      status,
+      error,
+      bestLine,
+      allLines,
+      scoreCp,
+      scoreMate,
+      requestEval,
+      evalPosition,
+      stop,
+      bestMove,
+      clearBestMove,
+    ],
   );
 }
