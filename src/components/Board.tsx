@@ -103,9 +103,28 @@ export function Board(props: BoardProps) {
   const showOutside = settings.coordDisplay === 'outside' || settings.coordDisplay === 'all';
 
   // -------- Right-click arrow drawing (chess.com style) --------
+  // `arrowDraft` holds the current drag-in-progress (only set while the
+  // user is interacting with the right mouse button). We also keep a ref
+  // so the document-level mousemove / mouseup listeners — which are
+  // attached exactly once when the draft starts — can read the latest
+  // draft value without re-binding on every render. That avoids a tight
+  // add/remove loop and lost events when the user drags fast.
   const [arrowDraft, setArrowDraft] = useState<
     { from: Square; pointerX: number; pointerY: number } | null
   >(null);
+  const arrowDraftRef = useRef<{ from: Square; pointerX: number; pointerY: number } | null>(null);
+  arrowDraftRef.current = arrowDraft;
+
+  // Latest callbacks in refs so the document listeners (attached once)
+  // can always reach the current handlers without re-binding.
+  const arrowColorRef = useRef(arrowColor);
+  arrowColorRef.current = arrowColor;
+  const onArrowDrawRef = useRef(onArrowDraw);
+  onArrowDrawRef.current = onArrowDraw;
+  const onArrowEraseAtRef = useRef(onArrowEraseAt);
+  onArrowEraseAtRef.current = onArrowEraseAt;
+  const onSquareRightClickRef = useRef(onSquareRightClick);
+  onSquareRightClickRef.current = onSquareRightClick;
 
   /** Find the square under a viewport (clientX, clientY). */
   const squareAtClientPoint = useCallback((clientX: number, clientY: number): Square | null => {
@@ -116,10 +135,13 @@ export function Board(props: BoardProps) {
   }, []);
 
   // Track right-button mouse globally while a drag is in progress.
+  // We attach these listeners ONCE per draft, on the document, and use
+  // refs to read the latest state.
   useEffect(() => {
     if (!arrowDraft) return;
     const startX = arrowDraft.pointerX;
     const startY = arrowDraft.pointerY;
+    const fromSq = arrowDraft.from;
     let dragged = false;
     const onMove = (e: MouseEvent) => {
       if (e.buttons !== 2) {
@@ -129,40 +151,47 @@ export function Board(props: BoardProps) {
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
       if (Math.hypot(dx, dy) > 6) dragged = true;
-      setArrowDraft({ ...arrowDraft, pointerX: e.clientX, pointerY: e.clientY });
+      // Update the live preview by mutating the ref-backed state. The
+      // ref makes the read in the document listener always see "now".
+      arrowDraftRef.current = { from: fromSq, pointerX: e.clientX, pointerY: e.clientY };
+      setArrowDraft({ from: fromSq, pointerX: e.clientX, pointerY: e.clientY });
     };
     const onUp = (e: MouseEvent) => finalize(e.clientX, e.clientY);
     const finalize = (clientX: number, clientY: number) => {
       const target = squareAtClientPoint(clientX, clientY);
-      if (dragged && target && target !== arrowDraft.from) {
-        onArrowDraw(arrowDraft.from, target, arrowColor);
+      const from = arrowDraftRef.current?.from ?? fromSq;
+      if (dragged && target && target !== from) {
+        onArrowDrawRef.current(from, target, arrowColorRef.current);
       } else if (!dragged && target) {
-        // Single right-click (no drag): toggle a square highlight with the
-        // currently selected arrow color. If the same square+color is
-        // already highlighted, remove it.
-        onSquareRightClick(target, arrowColor);
-      } else if (dragged && target === arrowDraft.from) {
+        // Single right-click (no drag): toggle a square highlight with
+        // the currently selected arrow color. If the same square+color
+        // is already highlighted, remove it.
+        onSquareRightClickRef.current(target, arrowColorRef.current);
+      } else if (dragged && target === from) {
         // Right-drag that ended on the same square: erase arrows at it.
-        onArrowEraseAt(target);
+        onArrowEraseAtRef.current(target);
       }
       setArrowDraft(null);
+      arrowDraftRef.current = null;
     };
     const onContextMenu = (e: MouseEvent) => e.preventDefault();
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    window.addEventListener('contextmenu', onContextMenu);
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('contextmenu', onContextMenu);
     return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      window.removeEventListener('contextmenu', onContextMenu);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('contextmenu', onContextMenu);
     };
-  }, [arrowDraft, arrowColor, onArrowDraw, onArrowEraseAt, onSquareRightClick, squareAtClientPoint]);
+  }, [arrowDraft, squareAtClientPoint]);
 
   const handleSquareRightDown = useCallback(
     (square: Square, e: ReactMouseEvent) => {
       if (e.button !== 2) return;
       e.preventDefault();
-      setArrowDraft({ from: square, pointerX: e.clientX, pointerY: e.clientY });
+      const draft = { from: square, pointerX: e.clientX, pointerY: e.clientY };
+      setArrowDraft(draft);
+      arrowDraftRef.current = draft;
     },
     [],
   );
