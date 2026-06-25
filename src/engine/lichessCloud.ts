@@ -21,7 +21,14 @@ export async function fetchLichessEval(fen: string, multiPv = 1): Promise<Liches
       headers: { Accept: 'application/json' },
       signal: controller.signal,
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      // 404 just means Lichess doesn't have this position in its cloud
+      // database. Not an error worth logging — Stockfish will still evaluate.
+      if (res.status !== 404) {
+        console.warn(`Lichess cloud eval returned ${res.status}`);
+      }
+      return null;
+    }
     return (await res.json()) as LichessEvalEntry;
   } catch {
     return null;

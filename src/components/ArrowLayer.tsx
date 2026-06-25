@@ -23,9 +23,9 @@ function squareCenter(
 
 /** For a knight move, return an L-shaped path: from → corner → to.
  *  For straight-line moves (orthogonal or diagonal), return a single segment.
- *  The L goes vertical-first (from → (from.x, to.y) → to), so the piece
- *  "rises/falls" first and then steps sideways — matching the user's
- *  preferred convention. */
+ *  The L goes "vertically" (along the file / x axis) first, then "horizontally"
+ *  (along the rank / y axis). So the elbow sits at (to.x, from.y): the
+ *  piece steps along the file to the target's file, then along the rank. */
 function buildPath(
   from: { x: number; y: number },
   to: { x: number; y: number },
@@ -34,19 +34,15 @@ function buildPath(
   if (pieceKind === 'other') {
     return `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
   }
-  // Knight: vertical-first L.
-  // Elbow is at (from.x, to.y): piece first moves along its file to the
-  // target's rank, then sideways along the target's rank to the target.
-  const elbowX = from.x;
-  const elbowY = to.y;
-  // If the vertical segment would be zero (same rank), fall back to
-  // horizontal-first to avoid a zero-length segment.
-  if (Math.abs(elbowY - from.y) < 0.5) {
-    const altElbowX = to.x;
-    const altElbowY = from.y;
-    return `M ${from.x} ${from.y} L ${altElbowX} ${altElbowY} L ${to.x} ${to.y}`;
+  // Knight: file-first L. Elbow at (to.x, from.y).
+  // If the file segment would be zero (same file), fall back to rank-first
+  // to avoid a zero-length segment.
+  if (Math.abs(to.x - from.x) < 0.5) {
+    // Same file → rank-first: (from.x, from.y) → (from.x, to.y) → (to.x, to.y)
+    return `M ${from.x} ${from.y} L ${from.x} ${to.y} L ${to.x} ${to.y}`;
   }
-  return `M ${from.x} ${from.y} L ${elbowX} ${elbowY} L ${to.x} ${to.y}`;
+  // File-first: (from.x, from.y) → (to.x, from.y) → (to.x, to.y)
+  return `M ${from.x} ${from.y} L ${to.x} ${from.y} L ${to.x} ${to.y}`;
 }
 
 export function ArrowLayer({ arrows, orientation, preview }: ArrowLayerProps) {
@@ -102,7 +98,8 @@ export function ArrowLayer({ arrows, orientation, preview }: ArrowLayerProps) {
     const path = buildPath(from, adjustedTo, pieceKind);
     const color = ARROW_COLORS[a.color];
     const opacity = a.auto ? 0.75 : 0.85;
-    const stroke = cell * 0.16;
+    const weightMul = a.weight === 'thick' ? 1.35 : a.weight === 'thin' ? 0.7 : 1;
+    const stroke = cell * 0.16 * weightMul;
     const arrowId = `arrowhead-${a.color}-${key}`;
 
     elements.push(
@@ -125,6 +122,7 @@ export function ArrowLayer({ arrows, orientation, preview }: ArrowLayerProps) {
           strokeLinecap="round"
           strokeLinejoin="round"
           fill="none"
+          strokeDasharray={a.dashed ? `${cell * 0.25} ${cell * 0.18}` : undefined}
           markerEnd={`url(#${arrowId})`}
         />
       </g>,

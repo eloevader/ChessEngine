@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
+import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactElement } from 'react';
 import { BoardSquare } from './BoardSquare';
 import { ArrowLayer } from './ArrowLayer';
 import { FILES, RANKS } from '../chess/board';
@@ -7,6 +7,7 @@ import type { Square, Piece } from '../chess/types';
 import { useSettings, ANIMATION_DURATIONS_MS } from '../settings/SettingsStore';
 import { pieceImageUrl } from '../chess/pieces';
 import type { Arrow, ArrowColor } from '../chess/threats';
+import { ARROW_COLORS } from '../chess/threats';
 
 interface BoardProps {
   board: (Piece | null)[][];
@@ -18,9 +19,12 @@ interface BoardProps {
   kingInCheck: Square | null;
   animatingMove: { from: Square; to: Square; piece: Piece; isCapture: boolean; captured: Piece | null } | null;
   arrows: Arrow[];
+  /** Right-click-on-square highlights (single square, no drag). */
+  squareHighlights: Map<Square, ArrowColor>;
   arrowColor: ArrowColor;
   onArrowDraw: (from: Square, to: Square, color: ArrowColor) => void;
   onArrowEraseAt: (square: Square) => void;
+  onSquareRightClick: (square: Square, color: ArrowColor) => void;
   onSquareClick: (square: Square) => void;
   onPieceDragStart: (square: Square, piece: Piece) => void;
   onDragOverSquare: (square: Square) => void;
@@ -59,9 +63,11 @@ export function Board(props: BoardProps) {
     kingInCheck,
     animatingMove,
     arrows,
+    squareHighlights,
     arrowColor,
     onArrowDraw,
     onArrowEraseAt,
+    onSquareRightClick,
     onSquareClick,
     onPieceDragStart,
     onDragOverSquare,
@@ -112,26 +118,31 @@ export function Board(props: BoardProps) {
   // Track right-button mouse globally while a drag is in progress.
   useEffect(() => {
     if (!arrowDraft) return;
+    const startX = arrowDraft.pointerX;
+    const startY = arrowDraft.pointerY;
+    let dragged = false;
     const onMove = (e: MouseEvent) => {
       if (e.buttons !== 2) {
-        // Right button released; finalize the arrow.
-        const target = squareAtClientPoint(e.clientX, e.clientY);
-        if (target && target !== arrowDraft.from) {
-          onArrowDraw(arrowDraft.from, target, arrowColor);
-        } else if (target === arrowDraft.from) {
-          // Right-click on a single square erases all arrows touching it.
-          onArrowEraseAt(target);
-        }
-        setArrowDraft(null);
+        finalize(e.clientX, e.clientY);
         return;
       }
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (Math.hypot(dx, dy) > 6) dragged = true;
       setArrowDraft({ ...arrowDraft, pointerX: e.clientX, pointerY: e.clientY });
     };
-    const onUp = (e: MouseEvent) => {
-      const target = squareAtClientPoint(e.clientX, e.clientY);
-      if (target && target !== arrowDraft.from) {
+    const onUp = (e: MouseEvent) => finalize(e.clientX, e.clientY);
+    const finalize = (clientX: number, clientY: number) => {
+      const target = squareAtClientPoint(clientX, clientY);
+      if (dragged && target && target !== arrowDraft.from) {
         onArrowDraw(arrowDraft.from, target, arrowColor);
-      } else if (target === arrowDraft.from) {
+      } else if (!dragged && target) {
+        // Single right-click (no drag): toggle a square highlight with the
+        // currently selected arrow color. If the same square+color is
+        // already highlighted, remove it.
+        onSquareRightClick(target, arrowColor);
+      } else if (dragged && target === arrowDraft.from) {
+        // Right-drag that ended on the same square: erase arrows at it.
         onArrowEraseAt(target);
       }
       setArrowDraft(null);
@@ -145,9 +156,9 @@ export function Board(props: BoardProps) {
       window.removeEventListener('mouseup', onUp);
       window.removeEventListener('contextmenu', onContextMenu);
     };
-  }, [arrowDraft, arrowColor, onArrowDraw, onArrowEraseAt, squareAtClientPoint]);
+  }, [arrowDraft, arrowColor, onArrowDraw, onArrowEraseAt, onSquareRightClick, squareAtClientPoint]);
 
-  const onSquareRightDown = useCallback(
+  const handleSquareRightDown = useCallback(
     (square: Square, e: ReactMouseEvent) => {
       if (e.button !== 2) return;
       e.preventDefault();
@@ -347,7 +358,7 @@ export function Board(props: BoardProps) {
               isCheck={kingInCheck === square}
               coordDisplay={settings.coordDisplay}
               onSquareClick={onSquareClick}
-              onSquareRightDown={onSquareRightDown}
+              onSquareRightDown={handleSquareRightDown}
               onPieceDragStart={onPieceDragStart}
               onDragOverSquare={onDragOverSquare}
               onDropOnSquare={onDropOnSquare}
@@ -358,6 +369,10 @@ export function Board(props: BoardProps) {
             />
           ))}
           {animatingMove && <AnimatedPiece anim={animatingMove} onDone={onAnimationDone} />}
+          <SquareHighlights
+            highlights={squareHighlights}
+            orientation={orientation}
+          />
           <ArrowLayer
             arrows={arrows}
             orientation={orientation}
@@ -481,6 +496,70 @@ function AnimatedPiece({ anim, onDone }: AnimatedPieceProps) {
         draggable={false}
       />
     </div>
+  );
+}
+
+interface SquareHighlightsProps {
+  highlights: Map<Square, ArrowColor>;
+  orientation: 'w' | 'b';
+}
+
+/** Renders single-square color highlights (e.g. right-click on a square
+ *  without dragging). One filled circle per highlighted square. */
+function SquareHighlights({ highlights, orientation }: SquareHighlightsProps) {
+  const [size, setSize] = useState(0);
+  const [board, setBoard] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const el = document.querySelector('.board') as HTMLElement | null;
+    if (!el) return;
+    setBoard(el);
+    const update = () => setSize(el.getBoundingClientRect().width);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  if (!board || size === 0 || highlights.size === 0) return null;
+  const cell = size / 8;
+  const out: ReactElement[] = [];
+  highlights.forEach((color, square) => {
+    const f = square.charCodeAt(0) - 97;
+    const r = parseInt(square[1], 10) - 1;
+    const fVis = orientation === 'w' ? f : 7 - f;
+    const rVis = orientation === 'w' ? 7 - r : r;
+    const cx = (fVis + 0.5) * cell;
+    const cy = (rVis + 0.5) * cell;
+    const rgb = ARROW_COLORS[color];
+    out.push(
+      <circle
+        key={`hl-${square}`}
+        cx={cx}
+        cy={cy}
+        r={cell * 0.32}
+        fill={`rgba(${rgb}, 0.55)`}
+        stroke={`rgba(${rgb}, 1)`}
+        strokeWidth={cell * 0.05}
+        pointerEvents="none"
+      />,
+    );
+  });
+  return (
+    <svg
+      style={{
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        width: '100%',
+        height: '100%',
+        pointerEvents: 'none',
+        zIndex: 3,
+        overflow: 'visible',
+      }}
+    >
+      {out}
+    </svg>
   );
 }
 

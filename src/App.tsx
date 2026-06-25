@@ -23,7 +23,7 @@ import { useSound } from './settings/SoundManager';
 import { getTheme, themeToCss } from './chess/themes';
 import { useEngine } from './engine/useEngine';
 import { useChessClock } from './chess/ChessClock';
-import { useLastMoveThreatSquares, type Arrow, type ArrowColor } from './chess/threats';
+import { analyzeThreats, threatsToArrows, type Arrow, type ArrowColor } from './chess/threats';
 import './App.css';
 
 // ---------------- Types ----------------
@@ -141,29 +141,34 @@ function App() {
   const [reviewing, setReviewing] = useState(false);
   /** User-drawn arrows on the board (chess.com style). */
   const [arrows, setArrows] = useState<Arrow[]>([]);
+  /** Single-square color highlights (right-click without drag). */
+  const [squareHighlights, setSquareHighlights] = useState<Map<Square, ArrowColor>>(
+    new Map(),
+  );
   /** Currently selected arrow color for the next right-click drag. */
   const [arrowColor, setArrowColor] = useState<ArrowColor>('green');
 
   // -------- Derived state --------
   const snapshot = game.snapshot();
-  // Auto threat arrows (red) are shown in analysis / review from the piece
-  // that just moved to each of the squares it attacks.
+  // Auto threat arrows are shown in analysis / review. We run the full
+  // bilateral ThreatAnalyzer and then filter to arrows that originate from
+  // the last-moved piece (so the visualization is "what does my move threaten").
   const showThreatsNow =
     settings.showThreats &&
     (settings.gameMode === 'analysis' || reviewing);
-  const threatSquares = useLastMoveThreatSquares(fen, showThreatsNow, lastMove);
-  // Build the auto-arrow list: one red arrow from lastMove.to to each
-  // attacked square. (Last move is guaranteed to be set whenever
-  // threatSquares is non-empty.)
   const threatArrows: Arrow[] = useMemo(() => {
-    if (!lastMove || threatSquares.size === 0) return [];
-    const out: Arrow[] = [];
-    for (const to of threatSquares) {
-      if (to === lastMove.to) continue;
-      out.push({ from: lastMove.to, to, color: 'red', auto: true });
+    if (!showThreatsNow) return [];
+    const all = analyzeThreats(fen);
+    if (!lastMove) {
+      // No last move: show the full bilateral attack map.
+      return threatsToArrows(all).map((a) => ({ ...a, auto: true }));
     }
-    return out;
-  }, [lastMove, threatSquares]);
+    // Only arrows from the last-moved piece.
+    return threatsToArrows(all.filter((t) => t.from === lastMove.to)).map((a) => ({
+      ...a,
+      auto: true,
+    }));
+  }, [fen, lastMove, showThreatsNow]);
   const allArrows = useMemo(() => [...threatArrows, ...arrows], [threatArrows, arrows]);
   const board = useMemo(() => buildBoard(fen), [fen]);
   const kingInCheck = useMemo(
@@ -260,6 +265,18 @@ function App() {
       if (!canHumanMove()) return;
       const piece = game.pieceAt(square);
 
+      // Left-click on an empty square with no selection: clear user arrows
+      // and highlights. This is the user's "left-click clears arrows" affordance.
+      if (
+        selected === null &&
+        !piece &&
+        (arrows.length > 0 || squareHighlights.size > 0)
+      ) {
+        setArrows([]);
+        setSquareHighlights(new Map());
+        return;
+      }
+
       if (selected === null) {
         if (piece && piece.color === game.turn()) selectSquare(square);
         return;
@@ -302,6 +319,8 @@ function App() {
       tryMove,
       settings.gameMode,
       engineSide,
+      arrows.length,
+      squareHighlights.size,
     ],
   );
 
@@ -387,6 +406,7 @@ function App() {
     setDrawOffer(null);
     setReviewing(false);
     setArrows([]);
+    setSquareHighlights(new Map());
   };
 
   // -------- Arrow drawing (right-click drag, chess.com style) --------
@@ -428,12 +448,35 @@ function App() {
     setArrows((prev) => prev.filter((a) => a.from !== square && a.to !== square));
   }, []);
 
-  const onClearArrows = useCallback(() => setArrows([]), []);
+  // Right-click (no drag) on a square toggles a single-square highlight in
+  // the currently selected color. Same color+square removes the highlight.
+  const onSquareRightClick = useCallback(
+    (square: Square, color: ArrowColor) => {
+      setSquareHighlights((prev) => {
+        const next = new Map(prev);
+        if (next.get(square) === color) {
+          next.delete(square);
+        } else {
+          next.set(square, color);
+        }
+        return next;
+      });
+    },
+    [],
+  );
 
-  // Esc clears all user-drawn arrows
+  const onClearArrows = useCallback(() => {
+    setArrows([]);
+    setSquareHighlights(new Map());
+  }, []);
+
+  // Esc clears all user-drawn arrows and highlights
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setArrows([]);
+      if (e.key === 'Escape') {
+        setArrows([]);
+        setSquareHighlights(new Map());
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -741,9 +784,11 @@ function App() {
               kingInCheck={kingInCheck}
               animatingMove={animatingMove}
               arrows={allArrows}
+              squareHighlights={squareHighlights}
               arrowColor={arrowColor}
               onArrowDraw={onArrowDraw}
               onArrowEraseAt={onArrowEraseAt}
+              onSquareRightClick={onSquareRightClick}
               onSquareClick={handleSquareClick}
               onPieceDragStart={handlePieceDragStart}
               onDragOverSquare={() => {}}
