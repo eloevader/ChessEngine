@@ -12,12 +12,17 @@ interface SquareProps {
   isLastMoveFrom: boolean;
   isLastMoveTo: boolean;
   isCheck: boolean;
+  /** True when this square is attacked by the piece that just moved (review mode). */
+  isThreatened: boolean;
   coordDisplay: CoordDisplay;
   onSquareClick: (square: Square) => void;
   onPieceDragStart: (square: Square, piece: Piece) => void;
   onDragOverSquare: (square: Square) => void;
   onDropOnSquare: (square: Square) => void;
   onDragEnd: () => void;
+  onPieceTouchStart: (square: Square, piece: Piece, e: React.TouchEvent) => void;
+  onPieceTouchMove: (square: Square, e: React.TouchEvent) => void;
+  onPieceTouchEnd: () => void;
 }
 
 function inCellCoords(square: Square, mode: CoordDisplay): { tl?: string; br?: string } {
@@ -70,18 +75,23 @@ export function BoardSquare(props: SquareProps) {
     isLastMoveFrom,
     isLastMoveTo,
     isCheck,
+    isThreatened,
     coordDisplay,
     onSquareClick,
     onPieceDragStart,
     onDragOverSquare,
     onDropOnSquare,
     onDragEnd,
+    onPieceTouchStart,
+    onPieceTouchMove,
+    onPieceTouchEnd,
   } = props;
 
   const light = isLightSquare(square);
   const classes: string[] = ['square', light ? 'light' : 'dark'];
   if (settings.highlightLastMove && (isLastMoveFrom || isLastMoveTo)) classes.push('last-move');
   if (settings.highlightCheck && isCheck && piece && piece.type === 'k') classes.push('in-check');
+  if (isThreatened) classes.push('threatened');
 
   const pieceClasses: string[] = ['piece', `piece-${piece?.color ?? 'w'}`];
   if (isSelected) pieceClasses.push('selected');
@@ -140,6 +150,10 @@ export function BoardSquare(props: SquareProps) {
             onPieceDragStart(square, piece);
           }}
           onDragEnd={onDragEnd}
+          onTouchStart={(e) => onPieceTouchStart(square, piece, e)}
+          onTouchMove={(e) => onPieceTouchMove(square, e)}
+          onTouchEnd={onPieceTouchEnd}
+          onTouchCancel={onPieceTouchEnd}
         />
       )}
       {showLegalHint && (
@@ -148,6 +162,7 @@ export function BoardSquare(props: SquareProps) {
           style={isCaptureTarget ? { color: light ? 'rgba(0,0,0,0.30)' : 'rgba(255,255,255,0.40)' } : {}}
         />
       )}
+      {isThreatened && <div className="threat-dot" aria-hidden="true" />}
     </div>
   );
 }

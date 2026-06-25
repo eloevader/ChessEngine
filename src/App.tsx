@@ -23,7 +23,7 @@ import { useSound } from './settings/SoundManager';
 import { getTheme, themeToCss } from './chess/themes';
 import { useEngine } from './engine/useEngine';
 import { useChessClock } from './chess/ChessClock';
-import { useThreats } from './chess/threats';
+import { useLastMoveThreats } from './chess/threats';
 import './App.css';
 
 // ---------------- Types ----------------
@@ -112,6 +112,9 @@ function App() {
   const { emit } = useSound();
   const engine = useEngine();
   const clock = useChessClock();
+  // Destructure the bits of the engine we use inside effects so each dep is a
+  // stable primitive/callback rather than the whole (memoized) engine object.
+  const { requestEval: engineRequestEval, stop: engineStop, bestMove: engineBestMove, clearBestMove: engineClearBestMove } = engine;
 
   // -------- Local UI state --------
   const [fen, setFen] = useState(game.fen());
@@ -139,8 +142,11 @@ function App() {
 
   // -------- Derived state --------
   const snapshot = game.snapshot();
-  // Show threats for the side that's about to move
-  const threats = useThreats(fen, settings.showThreats, snapshot.turn);
+  // Threats (red highlights) are only shown in review mode and only when the
+  // user has them enabled in settings. The "threat" is the set of squares
+  // attacked by the piece that just moved.
+  const showThreatsNow = settings.showThreats && reviewing;
+  const threatenedSquares = useLastMoveThreats(fen, showThreatsNow, lastMove);
   const board = useMemo(() => buildBoard(fen), [fen]);
   const kingInCheck = useMemo(
     () => (snapshot.inCheck ? findKingSquare(fen, snapshot.turn) : null),
@@ -470,10 +476,10 @@ function App() {
   // Auto-stop engine if game ended
   useEffect(() => {
     if (isGameEnded) {
-      engine.stop();
+      void engineStop();
       clock.switchTo(null);
     }
-  }, [isGameEnded, clock, engine]);
+  }, [isGameEnded, clock, engineStop]);
 
   // Draw / resign only in play modes
   const canOfferDraw = isPlayMode(settings.gameMode);
@@ -531,30 +537,30 @@ function App() {
 
   useEffect(() => {
     if (isEngineThinking) {
-      engine.requestEval(fen, settings.engineLevel);
+      engineRequestEval(fen, settings.engineLevel);
     } else {
-      engine.stop();
+      void engineStop();
     }
-  }, [fen, isEngineThinking, engine, settings.engineLevel]);
+  }, [fen, isEngineThinking, engineRequestEval, engineStop, settings.engineLevel]);
 
   // Apply engine's best move
   useEffect(() => {
     if (
-      engine.bestMove &&
+      engineBestMove &&
       settings.gameMode === 'computer' &&
       engineSide !== null &&
       snapshot.turn === engineSide &&
       !isGameEnded &&
       !gameEndReason
     ) {
-      const m = engine.bestMove;
-      engine.clearBestMove();
+      const m = engineBestMove;
+      engineClearBestMove();
       const from = m.slice(0, 2) as Square;
       const to = m.slice(2, 4) as Square;
       const promo = m.length > 4 ? (m[4] as 'q' | 'r' | 'b' | 'n') : undefined;
       tryMove(from, to, promo);
     }
-  }, [engine.bestMove, settings.gameMode, engineSide, isGameEnded, gameEndReason, snapshot.turn, tryMove]);
+  }, [engineBestMove, settings.gameMode, engineSide, isGameEnded, gameEndReason, snapshot.turn, tryMove, engineClearBestMove]);
 
   // -------- Status text --------
   const showEvalBar = settings.evalBarEnabled && isEngineThinking;
@@ -649,7 +655,7 @@ function App() {
               lastMove={lastMove}
               kingInCheck={kingInCheck}
               animatingMove={animatingMove}
-              threats={threats}
+              threatenedSquares={threatenedSquares}
               onSquareClick={handleSquareClick}
               onPieceDragStart={handlePieceDragStart}
               onDragOverSquare={() => {}}
@@ -699,8 +705,9 @@ function App() {
               <button onClick={() => setReviewing(false)}>Back to result</button>
             </div>
           )}
-          {/* Game actions (Draw/Resign) — only in play modes, separate from main controls */}
-          {isPlayMode(settings.gameMode) && !isGameEnded && (
+          {/* Game actions (Draw/Resign) — only in a play mode AND only once a
+              game is actually in progress (at least one move played). */}
+          {isPlayMode(settings.gameMode) && !isGameEnded && fullHistory.length > 0 && (
             <div className="game-actions">
               {!drawOffer && canOfferDraw && (
                 <button onClick={onOfferDraw} title="Offer a draw" className="game-action-btn">

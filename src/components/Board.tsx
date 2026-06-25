@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { BoardSquare } from './BoardSquare';
 import { FILES, RANKS } from '../chess/board';
 import type { Square, Piece } from '../chess/types';
 import { useSettings, ANIMATION_DURATIONS_MS } from '../settings/SettingsStore';
 import { pieceImageUrl } from '../chess/pieces';
-import type { Threat } from '../chess/threats';
 
 interface BoardProps {
   board: (Piece | null)[][];
@@ -16,7 +15,8 @@ interface BoardProps {
   lastMove: { from: Square; to: Square } | null;
   kingInCheck: Square | null;
   animatingMove: { from: Square; to: Square; piece: Piece; isCapture: boolean; captured: Piece | null } | null;
-  threats?: Threat[];
+  /** Squares attacked by the last-moved piece; highlighted in red during review. */
+  threatenedSquares?: Set<Square>;
   onSquareClick: (square: Square) => void;
   onPieceDragStart: (square: Square, piece: Piece) => void;
   onDragOverSquare: (square: Square) => void;
@@ -32,6 +32,17 @@ interface DisplaySquare {
   piece: Piece | null;
 }
 
+interface TouchDrag {
+  from: Square;
+  piece: Piece;
+  pointerX: number;
+  pointerY: number;
+  size: number;
+}
+
+const TOUCH_LONG_PRESS_MS = 150;
+const TOUCH_SLOP_PX = 8;
+
 export function Board(props: BoardProps) {
   const settings = useSettings();
   const {
@@ -43,7 +54,7 @@ export function Board(props: BoardProps) {
     lastMove,
     kingInCheck,
     animatingMove,
-    threats = [],
+    threatenedSquares,
     onSquareClick,
     onPieceDragStart,
     onDragOverSquare,
@@ -78,6 +89,163 @@ export function Board(props: BoardProps) {
 
   const showOutside = settings.coordDisplay === 'outside';
 
+  // -------- Touch drag (mobile) --------
+  // HTML5 drag-and-drop does not work on touch devices, so we implement
+  // touch-driven dragging ourselves: a long-press starts a drag, then
+  // touchmove on the document tracks the finger and a ghost piece follows.
+  const [touchDrag, setTouchDrag] = useState<TouchDrag | null>(null);
+  const touchDragRef = useRef<TouchDrag | null>(null);
+  touchDragRef.current = touchDrag;
+  const longPressTimer = useRef<number | null>(null);
+  const startPoint = useRef<{ x: number; y: number; square: Square; piece: Piece } | null>(null);
+  const boardElRef = useRef<HTMLDivElement | null>(null);
+
+  const clearLongPress = useCallback(() => {
+    if (longPressTimer.current !== null) {
+      window.clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+    startPoint.current = null;
+  }, []);
+
+  const endTouchDrag = useCallback(
+    (dropSquare: Square | null) => {
+      clearLongPress();
+      const drag = touchDragRef.current;
+      touchDragRef.current = null;
+      setTouchDrag(null);
+      if (drag) {
+        if (dropSquare) onDropOnSquare(dropSquare);
+        else onDragEnd();
+      }
+    },
+    [clearLongPress, onDropOnSquare, onDragEnd],
+  );
+
+  // Find the board square whose [data-square] element contains the given point.
+  const squareAtPoint = useCallback(
+    (clientX: number, clientY: number): Square | null => {
+      const el = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
+      if (!el) return null;
+      const squareEl = el.closest('[data-square]') as HTMLElement | null;
+      return (squareEl?.dataset.square as Square | undefined) ?? null;
+    },
+    [],
+  );
+
+  // Document-level touchmove/touchend listeners, attached only while dragging.
+  useEffect(() => {
+    if (!touchDrag) return;
+    const onMove = (e: TouchEvent) => {
+      // Cancel if a second finger goes down (pinch / multi-touch)
+      if (e.touches.length !== 1) {
+        endTouchDrag(null);
+        return;
+      }
+      const t = e.touches[0];
+      const drag = touchDragRef.current;
+      if (!drag) return;
+      // Convert viewport coordinates to board-local coordinates.
+      const boardEl = boardElRef.current;
+      const rect = boardEl?.getBoundingClientRect();
+      const localX = rect ? t.clientX - rect.left : t.clientX;
+      const localY = rect ? t.clientY - rect.top : t.clientY;
+      setTouchDrag({ ...drag, pointerX: localX, pointerY: localY });
+      e.preventDefault();
+      const sq = squareAtPoint(t.clientX, t.clientY);
+      if (sq) onDragOverSquare(sq);
+    };
+    const onEnd = (e: TouchEvent) => {
+      // Use the last known touch position; if no changedTouches, fall back
+      // to the current drag pointer position.
+      const last = e.changedTouches[0];
+      const drag = touchDragRef.current;
+      const x = last?.clientX ?? drag?.pointerX ?? 0;
+      const y = last?.clientY ?? drag?.pointerY ?? 0;
+      const sq = squareAtPoint(x, y);
+      endTouchDrag(sq);
+    };
+    const onCancel = () => endTouchDrag(null);
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onEnd);
+    document.addEventListener('touchcancel', onCancel);
+    return () => {
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onEnd);
+      document.removeEventListener('touchcancel', onCancel);
+    };
+  }, [touchDrag, endTouchDrag, onDragOverSquare, squareAtPoint]);
+
+  const onPieceTouchStart = useCallback(
+    (square: Square, piece: Piece, e: React.TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      startPoint.current = { x: t.clientX, y: t.clientY, square, piece };
+      if (longPressTimer.current !== null) window.clearTimeout(longPressTimer.current);
+      longPressTimer.current = window.setTimeout(() => {
+        const sp = startPoint.current;
+        if (!sp) return;
+        const boardEl = boardElRef.current;
+        const rect = boardEl?.getBoundingClientRect();
+        const size = boardEl ? boardEl.getBoundingClientRect().width / 8 : 40;
+        // Begin the drag: select the square (shows legal targets) and
+        // start tracking the finger with a ghost piece.
+        onPieceDragStart(sp.square, sp.piece);
+        // Store pointer in board-local coordinates so the ghost is positioned
+        // correctly regardless of board offset on the page.
+        touchDragRef.current = {
+          from: sp.square,
+          piece: sp.piece,
+          pointerX: rect ? sp.x - rect.left : sp.x,
+          pointerY: rect ? sp.y - rect.top : sp.y,
+          size,
+        };
+        setTouchDrag(touchDragRef.current);
+        longPressTimer.current = null;
+      }, TOUCH_LONG_PRESS_MS);
+    },
+    [onPieceDragStart],
+  );
+
+  const onPieceTouchMove = useCallback(
+    (_square: Square, e: React.TouchEvent) => {
+      // If user moves significantly before long-press fires, treat as a
+      // scroll gesture and cancel the pending drag.
+      const sp = startPoint.current;
+      if (!sp) return;
+      const t = e.touches[0];
+      const dx = t.clientX - sp.x;
+      const dy = t.clientY - sp.y;
+      if (Math.hypot(dx, dy) > TOUCH_SLOP_PX) {
+        clearLongPress();
+      }
+    },
+    [clearLongPress],
+  );
+
+  const onPieceTouchEnd = useCallback(() => {
+    // If long-press never fired, fall through to the click handler by
+    // clearing the pending timer and letting the synthetic click fire.
+    clearLongPress();
+  }, [clearLongPress]);
+
+  // Suppress click after a touch drag completes so the square doesn't
+  // immediately get re-selected by the synthetic click event.
+  useEffect(() => {
+    if (!touchDrag) return;
+    const swallow = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    // The browser fires a click ~300ms after touchend; capture it once.
+    const t = window.setTimeout(() => {
+      document.addEventListener('click', swallow, { capture: true, once: true });
+    }, 0);
+    return () => {
+      window.clearTimeout(t);
+    };
+  }, [touchDrag]);
+
   return (
     <div className="board-frame">
       <div className="coord-box">
@@ -95,6 +263,7 @@ export function Board(props: BoardProps) {
         </div>
         <div
           className="board"
+          ref={boardElRef}
           style={{ '--board-anim-ms': `${ANIMATION_DURATIONS_MS[settings.animationSpeed]}ms` } as CSSProperties}
         >
           {displaySquares.map(({ square, piece }) => (
@@ -108,16 +277,37 @@ export function Board(props: BoardProps) {
               isLastMoveFrom={lastMove?.from === square}
               isLastMoveTo={lastMove?.to === square}
               isCheck={kingInCheck === square}
+              isThreatened={threatenedSquares?.has(square) ?? false}
               coordDisplay={settings.coordDisplay}
               onSquareClick={onSquareClick}
               onPieceDragStart={onPieceDragStart}
               onDragOverSquare={onDragOverSquare}
               onDropOnSquare={onDropOnSquare}
               onDragEnd={onDragEnd}
+              onPieceTouchStart={onPieceTouchStart}
+              onPieceTouchMove={onPieceTouchMove}
+              onPieceTouchEnd={onPieceTouchEnd}
             />
           ))}
           {animatingMove && <AnimatedPiece anim={animatingMove} onDone={onAnimationDone} />}
-          {threats.length > 0 && <ThreatArrows threats={threats} orientation={orientation} />}
+          {touchDrag && (
+            <div
+              className="touch-ghost"
+              aria-hidden="true"
+              style={{
+                left: touchDrag.pointerX - touchDrag.size / 2,
+                top: touchDrag.pointerY - touchDrag.size / 2,
+                width: touchDrag.size,
+                height: touchDrag.size,
+              }}
+            >
+              <img
+                src={pieceImageUrl(settings.pieceSet, touchDrag.piece.color, touchDrag.piece.type)}
+                alt=""
+                draggable={false}
+              />
+            </div>
+          )}
         </div>
         <div className="coord-edge coord-right">
           {showOutside && <div className="ranks-col">{ranks.map((r) => (
@@ -210,103 +400,5 @@ function AnimatedPiece({ anim, onDone }: AnimatedPieceProps) {
       />
     </div>
   );
-}
-
-interface ThreatArrowsProps {
-  threats: Threat[];
-  orientation: 'w' | 'b';
-}
-
-function ThreatArrows({ threats, orientation }: ThreatArrowsProps) {
-  const [size, setSize] = useState(0);
-  const [board, setBoard] = useState<HTMLElement | null>(null);
-
-  useEffect(() => {
-    const el = document.querySelector('.board') as HTMLElement | null;
-    if (!el) return;
-    setBoard(el);
-    const update = () => setSize(el.getBoundingClientRect().width);
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  if (!board || size === 0) return null;
-
-  const cell = size / 8;
-  const arrows: ReactElement[] = [];
-
-  // Group threats by from+to to dedupe overlapping arrows
-  const seen = new Set<string>();
-  for (const t of threats) {
-    const key = `${t.from}-${t.to}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-
-    const fromFile = t.from.charCodeAt(0) - 97;
-    const fromRank = parseInt(t.from[1], 10) - 1;
-    const toFile = t.to.charCodeAt(0) - 97;
-    const toRank = parseInt(t.to[1], 10) - 1;
-
-    // If orientation is black, flip the coordinates
-    const f1 = orientation === 'w' ? fromFile : 7 - fromFile;
-    const r1 = orientation === 'w' ? 7 - fromRank : fromRank;
-    const f2 = orientation === 'w' ? toFile : 7 - toFile;
-    const r2 = orientation === 'w' ? 7 - toRank : toRank;
-
-    const x1 = (f1 + 0.5) * cell;
-    const y1 = (r1 + 0.5) * cell;
-    const x2 = (f2 + 0.5) * cell;
-    const y2 = (r2 + 0.5) * cell;
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const len = Math.sqrt(dx * dx + dy * dy);
-
-    const stroke = t.attacker === 'w' ? 'rgba(255, 255, 255, 0.85)' : 'rgba(20, 20, 20, 0.85)';
-
-    arrows.push(
-      <svg
-        key={key}
-        style={{
-          position: 'absolute',
-          left: 0,
-          top: 0,
-          width: '100%',
-          height: '100%',
-          pointerEvents: 'none',
-          zIndex: 4,
-          overflow: 'visible',
-        }}
-      >
-        <defs>
-          <marker
-            id={`arrow-${t.attacker}-${key}`}
-            viewBox="0 0 10 10"
-            refX="5"
-            refY="5"
-            markerWidth="4"
-            markerHeight="4"
-            orient="auto-start-reverse"
-          >
-            <path d="M 0 0 L 10 5 L 0 10 z" fill={stroke} />
-          </marker>
-        </defs>
-        <line
-          x1={x1}
-          y1={y1}
-          x2={x2 - (dx / len) * cell * 0.25}
-          y2={y2 - (dy / len) * cell * 0.25}
-          stroke={stroke}
-          strokeWidth={cell * 0.18}
-          strokeLinecap="round"
-          markerEnd={`url(#arrow-${t.attacker}-${key})`}
-          opacity={0.7}
-        />
-      </svg>,
-    );
-  }
-
-  return <>{arrows}</>;
 }
 

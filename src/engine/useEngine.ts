@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StockfishEngine, type EngineLine, type EngineMessage } from './StockfishEngine';
 import { fetchLichessEval } from './lichessCloud';
 
@@ -95,7 +95,18 @@ export function useEngine(): UseEngineReturn {
     }
   };
 
-  const requestEval = (fen: string, level: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8) => {
+  const startEngineEval = useCallback(async (fen: string, level: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8) => {
+    try {
+      const e = await ensureEngine();
+      await e.setPosition(fen);
+      setStatus('thinking');
+      await e.go({ level });
+    } catch {
+      /* already handled in ensureEngine */
+    }
+  }, []);
+
+  const requestEval = useCallback((fen: string, level: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8) => {
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(async () => {
       // Try Lichess cloud first for instant results
@@ -136,40 +147,36 @@ export function useEngine(): UseEngineReturn {
       }
       void startEngineEval(fen, level);
     }, 200) as unknown as number;
-  };
+  }, [startEngineEval]);
 
-  const startEngineEval = async (fen: string, level: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8) => {
-    try {
-      const e = await ensureEngine();
-      await e.setPosition(fen);
-      setStatus('thinking');
-      await e.go({ level });
-    } catch {
-      /* already handled in ensureEngine */
-    }
-  };
-
-  const stop = async () => {
+  const stop = useCallback(async () => {
     if (debounceRef.current) {
       window.clearTimeout(debounceRef.current);
       debounceRef.current = null;
     }
     if (engineRef.current) await engineRef.current.stop();
     setStatus('ready');
-  };
+  }, []);
 
-  const clearBestMove = () => setBestMove(null);
+  const clearBestMove = useCallback(() => setBestMove(null), []);
 
-  return {
-    status,
-    error,
-    bestLine,
-    allLines,
-    scoreCp,
-    scoreMate,
-    requestEval,
-    stop,
-    bestMove,
-    clearBestMove,
-  };
+  // Memoize the returned object so its identity is stable across renders
+  // (when none of the underlying state changes). Otherwise consumers using
+  // it in a useEffect dependency array will refire on every render and
+  // keep restarting the engine evaluation.
+  return useMemo(
+    () => ({
+      status,
+      error,
+      bestLine,
+      allLines,
+      scoreCp,
+      scoreMate,
+      requestEval,
+      stop,
+      bestMove,
+      clearBestMove,
+    }),
+    [status, error, bestLine, allLines, scoreCp, scoreMate, requestEval, stop, bestMove, clearBestMove],
+  );
 }

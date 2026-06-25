@@ -2,13 +2,6 @@ import { useMemo } from 'react';
 import type { Square } from '../chess/types';
 import { GameState } from './GameState';
 
-export interface Threat {
-  from: Square;
-  to: Square;
-  /** 'w' = white is attacking this square, 'b' = black is attacking it. */
-  attacker: 'w' | 'b';
-}
-
 // Attack patterns: [fileDelta, rankDelta] where rankDelta is +1 for white
 // (moving up the board) and -1 for black (moving down the board).
 const KNIGHT_MOVES: [number, number][] = [
@@ -39,80 +32,77 @@ function squareAt(fileIdx: number, rankIdx: number): Square {
   return (String.fromCharCode(97 + fileIdx) + (rankIdx + 1)) as Square;
 }
 
-/** Computes attack arrows for the current position.
- *  Only shows threats from the specified side to avoid cluttering the board. */
-export function useThreats(
-  fen: string,
-  showThreats: boolean,
-  attackerColor: 'w' | 'b',
-): Threat[] {
-  return useMemo(() => {
-    if (!showThreats) return [];
+function squareToCoords(s: Square): { f: number; r: number } {
+  return { f: s.charCodeAt(0) - 97, r: parseInt(s[1], 10) - 1 };
+}
 
-    const game = new GameState(fen);
-    // board() is 8x8 with board[0] = rank 8 (top of board in standard view)
-    const board = (game as unknown as { chess: { board: () => Array<Array<{ type: string; color: 'w' | 'b' } | null>> } })
-      .chess.board();
+/** Returns the set of squares attacked by the piece currently sitting on `from`. */
+function attacksFromSquare(fen: string, from: Square): Set<Square> {
+  const game = new GameState(fen);
+  const board = (game as unknown as { chess: { board: () => Array<Array<{ type: string; color: 'w' | 'b' } | null>> } })
+    .chess.board();
 
-    // Pawn attack direction depends on color
-    const pawnDir = attackerColor === 'w' ? 1 : -1;
-    const pawnAttacks: [number, number][] = [[-1, pawnDir], [1, pawnDir]];
+  const { f, r } = squareToCoords(from);
+  // board[0] is rank 8 (top), so convert our rank (1..8) to board index.
+  const row = 7 - r;
+  const col = f;
+  const piece = board[row]?.[col] ?? null;
+  if (!piece) return new Set();
 
-    const threats: Threat[] = [];
+  const pawnDir = piece.color === 'w' ? 1 : -1;
+  const pawnAttacks: [number, number][] = [[-1, pawnDir], [1, pawnDir]];
 
-    for (let r = 0; r < 8; r++) {
-      for (let c = 0; c < 8; c++) {
-        const piece = board[r][c];
-        if (!piece || piece.color !== attackerColor) continue;
+  let dirs: [number, number][] = [];
+  switch (piece.type) {
+    case 'p': dirs = pawnAttacks; break;
+    case 'n': dirs = KNIGHT_MOVES; break;
+    case 'b': dirs = BISHOP_DIRS; break;
+    case 'r': dirs = ROOK_DIRS; break;
+    case 'q': dirs = [...BISHOP_DIRS, ...ROOK_DIRS]; break;
+    case 'k': dirs = KING_MOVES; break;
+    default: return new Set();
+  }
 
-        const fromSquare = squareAt(c, r);
-        let dirs: [number, number][] = [];
+  const isSliding = SLIDING.has(piece.type);
+  const squares = new Set<Square>();
 
-        switch (piece.type) {
-          case 'p':
-            dirs = pawnAttacks;
-            break;
-          case 'n':
-            dirs = KNIGHT_MOVES;
-            break;
-          case 'b':
-            dirs = BISHOP_DIRS;
-            break;
-          case 'r':
-            dirs = ROOK_DIRS;
-            break;
-          case 'q':
-            dirs = [...BISHOP_DIRS, ...ROOK_DIRS];
-            break;
-          case 'k':
-            dirs = KING_MOVES;
-            break;
-          default:
-            continue;
-        }
-
-        const isSliding = SLIDING.has(piece.type);
-
-        for (const [df, dr] of dirs) {
-          if (!isSliding) {
-            const tf = c + df;
-            const tr = r + dr;
-            if (!inBounds(tf, tr)) continue;
-            threats.push({ from: fromSquare, to: squareAt(tf, tr), attacker: piece.color });
-            continue;
-          }
-          // Sliding pieces: walk until blocked or off board
-          let tf = c + df;
-          let tr = r + dr;
-          while (inBounds(tf, tr)) {
-            threats.push({ from: fromSquare, to: squareAt(tf, tr), attacker: piece.color });
-            if (board[tr][tf]) break; // blocked by any piece (own or enemy)
-            tf += df;
-            tr += dr;
-          }
-        }
-      }
+  for (const [df, dr] of dirs) {
+    if (!isSliding) {
+      const tf = col + df;
+      const tr = row + dr;
+      if (!inBounds(tf, tr)) continue;
+      squares.add(squareAt(tf, tr));
+      continue;
     }
-    return threats;
-  }, [fen, showThreats, attackerColor]);
+    let tf = col + df;
+    let tr = row + dr;
+    while (inBounds(tf, tr)) {
+      squares.add(squareAt(tf, tr));
+      if (board[tr][tf]) break; // blocked by any piece (own or enemy)
+      tf += df;
+      tr += dr;
+    }
+  }
+
+  return squares;
+}
+
+/** Returns the set of squares attacked by the piece that just moved.
+ *  Used during post-game review to highlight "if the opponent doesn't
+ *  move, I could take this" in red.
+ *
+ *  - `enabled` should only be true in review mode.
+ *  - `lastMove` is the most recent move (from -> to).
+ *  - Returns an empty set when disabled or when no move has been played.
+ */
+export function useLastMoveThreats(
+  fen: string,
+  enabled: boolean,
+  lastMove: { from: Square; to: Square } | null,
+): Set<Square> {
+  return useMemo(() => {
+    if (!enabled || !lastMove) return new Set();
+    // Use the destination square: that's where the piece now sits.
+    return attacksFromSquare(fen, lastMove.to);
+  }, [fen, enabled, lastMove]);
 }
