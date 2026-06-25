@@ -141,65 +141,67 @@ export function NewGameDialog({ open, onStart, onCancel }: NewGameDialogProps) {
             </section>
           )}
 
-          <section className="ng-section">
-            <h3>Time Control</h3>
-            <div className="ng-preset-grid">
-              {PRESETS.map((p, i) => (
-                <button
-                  key={p.label}
-                  className={`ng-preset ${presetIdx === i ? 'selected' : ''}`}
-                  onClick={() => onPresetChange(i)}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-            {isCustom && (
-              <div className="ng-custom">
-                <div className="ng-row">
-                  <label>Minutes</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="180"
-                    value={min}
-                    onChange={(e) => setMin(Math.max(0, parseInt(e.target.value) || 0))}
-                  />
-                </div>
-                <div className="ng-row">
-                  <label>Seconds</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="59"
-                    value={sec}
-                    onChange={(e) => setSec(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
-                  />
-                </div>
-                <div className="ng-row">
-                  <label>Increment (sec)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="60"
-                    value={inc}
-                    onChange={(e) => setInc(Math.max(0, parseInt(e.target.value) || 0))}
-                  />
-                </div>
+          {draft.gameMode !== 'analysis' && (
+            <section className="ng-section">
+              <h3>Time Control</h3>
+              <div className="ng-preset-grid">
+                {PRESETS.map((p, i) => (
+                  <button
+                    key={p.label}
+                    className={`ng-preset ${presetIdx === i ? 'selected' : ''}`}
+                    onClick={() => onPresetChange(i)}
+                  >
+                    {p.label}
+                  </button>
+                ))}
               </div>
-            )}
-            <div className="ng-summary">
-              {isNoClock ? (
-                <span>No time limit</span>
-              ) : (
-                <span>
-                  {min > 0 ? `${min}m ` : ''}
-                  {sec > 0 ? `${sec}s ` : ''}
-                  {inc > 0 ? `+ ${inc}s increment` : ''}
-                </span>
+              {isCustom && (
+                <div className="ng-custom">
+                  <div className="ng-row">
+                    <label>Minutes</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="180"
+                      value={min}
+                      onChange={(e) => setMin(Math.max(0, parseInt(e.target.value) || 0))}
+                    />
+                  </div>
+                  <div className="ng-row">
+                    <label>Seconds</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="59"
+                      value={sec}
+                      onChange={(e) => setSec(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+                    />
+                  </div>
+                  <div className="ng-row">
+                    <label>Increment (sec)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="60"
+                      value={inc}
+                      onChange={(e) => setInc(Math.max(0, parseInt(e.target.value) || 0))}
+                    />
+                  </div>
+                </div>
               )}
-            </div>
-          </section>
+              <div className="ng-summary">
+                {isNoClock ? (
+                  <span>No time limit</span>
+                ) : (
+                  <span>
+                    {min > 0 ? `${min}m ` : ''}
+                    {sec > 0 ? `${sec}s ` : ''}
+                    {inc > 0 ? `+ ${inc}s increment` : ''}
+                  </span>
+                )}
+              </div>
+            </section>
+          )}
         </div>
         <div className="ng-footer">
           <button className="text-btn" onClick={onCancel}>

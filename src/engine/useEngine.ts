@@ -109,7 +109,13 @@ export function useEngine(): UseEngineReturn {
   const requestEval = useCallback((fen: string, level: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8) => {
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(async () => {
-      // Try Lichess cloud first for instant results
+      // Kick off Stockfish immediately so the user always gets an evaluation
+      // quickly, even if Lichess cloud is slow / blocked. The first info line
+      // from Stockfish typically arrives within a few hundred ms.
+      void startEngineEval(fen, level);
+
+      // In parallel, try Lichess cloud for an instant score and best move.
+      // fetchLichessEval has its own 2.5s timeout, so this never stalls us.
       try {
         const cloud = await fetchLichessEval(fen);
         if (cloud && cloud.pvs && cloud.pvs.length > 0) {
@@ -138,14 +144,10 @@ export function useEngine(): UseEngineReturn {
           if (pvMoves.length > 0) {
             setBestMove(pvMoves[0]);
           }
-          // Also start Stockfish for deeper analysis
-          void startEngineEval(fen, level);
-          return;
         }
       } catch {
-        /* cloud failed, fall through to Stockfish */
+        /* cloud failed, Stockfish is already running */
       }
-      void startEngineEval(fen, level);
     }, 200) as unknown as number;
   }, [startEngineEval]);
 

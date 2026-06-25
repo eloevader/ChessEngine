@@ -142,10 +142,12 @@ function App() {
 
   // -------- Derived state --------
   const snapshot = game.snapshot();
-  // Threats (red highlights) are only shown in review mode and only when the
-  // user has them enabled in settings. The "threat" is the set of squares
-  // attacked by the piece that just moved.
-  const showThreatsNow = settings.showThreats && reviewing;
+  // Threats (red highlights) are shown whenever the user is in a non-playing
+  // exploration mode — analysis (the default), or post-game review. They are
+  // never shown during a live local / vs-computer game.
+  const showThreatsNow =
+    settings.showThreats &&
+    (settings.gameMode === 'analysis' || reviewing);
   const threatenedSquares = useLastMoveThreats(fen, showThreatsNow, lastMove);
   const board = useMemo(() => buildBoard(fen), [fen]);
   const kingInCheck = useMemo(

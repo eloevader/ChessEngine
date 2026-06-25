@@ -35,7 +35,16 @@ export interface Settings {
   showThreats: boolean;
 }
 
-const STORAGE_KEY = 'chess-analyzer.settings.v5';
+const STORAGE_KEY = 'chess-analyzer.settings.v6';
+// Older keys we may have used previously. We don't read from them, but we
+// delete them on load so users who upgrade don't get stuck on stale settings.
+const LEGACY_STORAGE_KEYS = [
+  'chess-analyzer.settings.v1',
+  'chess-analyzer.settings.v2',
+  'chess-analyzer.settings.v3',
+  'chess-analyzer.settings.v4',
+  'chess-analyzer.settings.v5',
+];
 
 export const DEFAULT_SETTINGS: Settings = {
   boardThemeId: 'classic',
@@ -53,7 +62,7 @@ export const DEFAULT_SETTINGS: Settings = {
   animationSpeed: 'normal',
   animationStyle: 'slide',
   showSettingsOnStart: false,
-  gameMode: 'local',
+  gameMode: 'analysis',
   engineLevel: 4,
   playerSide: 'w',
   evalBarEnabled: true,
@@ -64,6 +73,12 @@ export const DEFAULT_SETTINGS: Settings = {
 
 function loadSettings(): Settings {
   if (typeof window === 'undefined') return DEFAULT_SETTINGS;
+  // Wipe any legacy keys from prior versions.
+  try {
+    for (const k of LEGACY_STORAGE_KEYS) localStorage.removeItem(k);
+  } catch {
+    /* ignore */
+  }
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_SETTINGS;
