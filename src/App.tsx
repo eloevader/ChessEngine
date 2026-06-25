@@ -167,11 +167,16 @@ function App() {
   const showThreatsNow =
     settings.showThreats &&
     (settings.gameMode === 'analysis' || reviewing);
+  // The side that just moved is the opposite of the side to move now.
+  const lastMoverColor: 'w' | 'b' | null = lastMove
+    ? (snapshot.turn === 'w' ? 'b' : 'w')
+    : null;
   const liveAttacks = useLiveAttacks(
     fen,
     showThreatsNow,
     lastMove?.to ?? null,
     settings.threatScope,
+    lastMoverColor,
   );
   const threatArrows: Arrow[] = liveAttacks.arrows;
   const attackDescriptions: AttackDescription[] = liveAttacks.descriptions;

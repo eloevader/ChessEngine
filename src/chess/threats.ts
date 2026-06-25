@@ -237,11 +237,18 @@ export function computeLiveAttacks(
  *  pieces. White's arrows are blue, Black's are red. Empty squares and
  *  same-color pieces are ignored. Sliding pieces stop at the first
  *  piece in any direction. */
-export function computeBoardAttacks(fen: string): LiveAttackResult {
+/** Compute every direct attack by pieces of the given `attackerColor`
+ *  on enemy pieces. White's arrows are blue, Black's are red. Empty
+ *  squares and same-color pieces are ignored. Sliding pieces stop at
+ *  the first piece in any direction. */
+export function computeBoardAttacks(
+  fen: string,
+  attackerColor: 'w' | 'b',
+): LiveAttackResult {
   const game = new GameState(fen);
   const board = (game as unknown as { chess: { board: () => Board } })
     .chess.board();
-  return buildThreatsFrom({ board }, null);
+  return buildThreatsFrom({ board, onlyColor: attackerColor }, null);
 }
 
 // ---------- Hook ----------
@@ -251,11 +258,15 @@ export function useLiveAttacks(
   enabled: boolean,
   movedSquare: Square | null,
   scope: 'lastMove' | 'board' = 'lastMove',
+  attackerColor: 'w' | 'b' | null = null,
 ): LiveAttackResult {
   return useMemo(() => {
     if (!enabled) return { arrows: [], descriptions: [] };
-    if (scope === 'board') return computeBoardAttacks(fen);
+    if (scope === 'board') {
+      if (!attackerColor) return { arrows: [], descriptions: [] };
+      return computeBoardAttacks(fen, attackerColor);
+    }
     if (!movedSquare) return { arrows: [], descriptions: [] };
     return computeLiveAttacks(fen, movedSquare);
-  }, [fen, enabled, movedSquare, scope]);
+  }, [fen, enabled, movedSquare, scope, attackerColor]);
 }
