@@ -432,6 +432,13 @@ function AnimatedPiece({ anim, onDone }: AnimatedPieceProps) {
   const settings = useSettings();
   const duration = ANIMATION_DURATIONS_MS[settings.animationSpeed];
   const [geom, setGeom] = useState<{ fromX: number; fromY: number; dx: number; dy: number; size: number } | null>(null);
+  // Keep the latest onDone in a ref so the timer effect below doesn't
+  // re-run (and reset the timer) every time the parent re-renders with
+  // a new inline `onDone` function. Without this, `onAnimationDone` is
+  // never called and the user is stuck in the "animating" state, which
+  // blocks subsequent moves in computer mode.
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
 
   useEffect(() => {
     const board = document.querySelector('.board') as HTMLDivElement | null;
@@ -444,7 +451,7 @@ function AnimatedPiece({ anim, onDone }: AnimatedPieceProps) {
     const from = sq(anim.from);
     const to = sq(anim.to);
     if (!from || !to) {
-      onDone();
+      onDoneRef.current();
       return;
     }
     const fromX = from.left - rect.left;
@@ -452,13 +459,13 @@ function AnimatedPiece({ anim, onDone }: AnimatedPieceProps) {
     const dx = to.left - from.left;
     const dy = to.top - from.top;
     setGeom({ fromX, fromY, dx, dy, size: from.width });
-  }, [anim, onDone]);
+  }, [anim]);
 
   useEffect(() => {
     if (!geom) return;
-    const t = setTimeout(() => onDone(), duration + 20);
+    const t = setTimeout(() => onDoneRef.current(), duration + 20);
     return () => clearTimeout(t);
-  }, [geom, duration, onDone]);
+  }, [geom, duration]);
 
   if (!geom) return null;
 
@@ -505,7 +512,9 @@ interface SquareHighlightsProps {
 }
 
 /** Renders single-square color highlights (e.g. right-click on a square
- *  without dragging). One filled circle per highlighted square. */
+ *  without dragging). Each highlight fills the entire square (the cell
+ *  bbox) with the chosen arrow color, at low opacity, so the cell
+ *  itself is visibly tinted. */
 function SquareHighlights({ highlights, orientation }: SquareHighlightsProps) {
   const [size, setSize] = useState(0);
   const [board, setBoard] = useState<HTMLElement | null>(null);
@@ -529,18 +538,19 @@ function SquareHighlights({ highlights, orientation }: SquareHighlightsProps) {
     const r = parseInt(square[1], 10) - 1;
     const fVis = orientation === 'w' ? f : 7 - f;
     const rVis = orientation === 'w' ? 7 - r : r;
-    const cx = (fVis + 0.5) * cell;
-    const cy = (rVis + 0.5) * cell;
+    const x = fVis * cell;
+    const y = rVis * cell;
     const rgb = ARROW_COLORS[color];
     out.push(
-      <circle
+      <rect
         key={`hl-${square}`}
-        cx={cx}
-        cy={cy}
-        r={cell * 0.32}
+        x={x}
+        y={y}
+        width={cell}
+        height={cell}
         fill={`rgba(${rgb}, 0.55)`}
         stroke={`rgba(${rgb}, 1)`}
-        strokeWidth={cell * 0.05}
+        strokeWidth={cell * 0.04}
         pointerEvents="none"
       />,
     );
