@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
 import { BoardSquare } from './BoardSquare';
+import { ArrowLayer } from './ArrowLayer';
 import { FILES, RANKS } from '../chess/board';
 import type { Square, Piece } from '../chess/types';
 import { useSettings, ANIMATION_DURATIONS_MS } from '../settings/SettingsStore';
 import { pieceImageUrl } from '../chess/pieces';
+import type { Arrow, ArrowColor } from '../chess/threats';
 
 interface BoardProps {
   board: (Piece | null)[][];
@@ -15,8 +17,10 @@ interface BoardProps {
   lastMove: { from: Square; to: Square } | null;
   kingInCheck: Square | null;
   animatingMove: { from: Square; to: Square; piece: Piece; isCapture: boolean; captured: Piece | null } | null;
-  /** Squares attacked by the last-moved piece; highlighted in red during review. */
-  threatenedSquares?: Set<Square>;
+  arrows: Arrow[];
+  arrowColor: ArrowColor;
+  onArrowDraw: (from: Square, to: Square, color: ArrowColor) => void;
+  onArrowEraseAt: (square: Square) => void;
   onSquareClick: (square: Square) => void;
   onPieceDragStart: (square: Square, piece: Piece) => void;
   onDragOverSquare: (square: Square) => void;
@@ -54,7 +58,10 @@ export function Board(props: BoardProps) {
     lastMove,
     kingInCheck,
     animatingMove,
-    threatenedSquares,
+    arrows,
+    arrowColor,
+    onArrowDraw,
+    onArrowEraseAt,
     onSquareClick,
     onPieceDragStart,
     onDragOverSquare,
@@ -88,6 +95,66 @@ export function Board(props: BoardProps) {
   }, [board, files, ranks]);
 
   const showOutside = settings.coordDisplay === 'outside';
+
+  // -------- Right-click arrow drawing (chess.com style) --------
+  const [arrowDraft, setArrowDraft] = useState<
+    { from: Square; pointerX: number; pointerY: number } | null
+  >(null);
+
+  /** Find the square under a viewport (clientX, clientY). */
+  const squareAtClientPoint = useCallback((clientX: number, clientY: number): Square | null => {
+    const el = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
+    if (!el) return null;
+    const sq = el.closest('[data-square]') as HTMLElement | null;
+    return (sq?.dataset.square as Square | undefined) ?? null;
+  }, []);
+
+  // Track right-button mouse globally while a drag is in progress.
+  useEffect(() => {
+    if (!arrowDraft) return;
+    const onMove = (e: MouseEvent) => {
+      if (e.buttons !== 2) {
+        // Right button released; finalize the arrow.
+        const target = squareAtClientPoint(e.clientX, e.clientY);
+        if (target && target !== arrowDraft.from) {
+          onArrowDraw(arrowDraft.from, target, arrowColor);
+        } else if (target === arrowDraft.from) {
+          // Right-click on a single square erases all arrows touching it.
+          onArrowEraseAt(target);
+        }
+        setArrowDraft(null);
+        return;
+      }
+      setArrowDraft({ ...arrowDraft, pointerX: e.clientX, pointerY: e.clientY });
+    };
+    const onUp = (e: MouseEvent) => {
+      const target = squareAtClientPoint(e.clientX, e.clientY);
+      if (target && target !== arrowDraft.from) {
+        onArrowDraw(arrowDraft.from, target, arrowColor);
+      } else if (target === arrowDraft.from) {
+        onArrowEraseAt(target);
+      }
+      setArrowDraft(null);
+    };
+    const onContextMenu = (e: MouseEvent) => e.preventDefault();
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('contextmenu', onContextMenu);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('contextmenu', onContextMenu);
+    };
+  }, [arrowDraft, arrowColor, onArrowDraw, onArrowEraseAt, squareAtClientPoint]);
+
+  const onSquareRightDown = useCallback(
+    (square: Square, e: ReactMouseEvent) => {
+      if (e.button !== 2) return;
+      e.preventDefault();
+      setArrowDraft({ from: square, pointerX: e.clientX, pointerY: e.clientY });
+    },
+    [],
+  );
 
   // -------- Touch drag (mobile) --------
   // HTML5 drag-and-drop does not work on touch devices, so we implement
@@ -265,6 +332,7 @@ export function Board(props: BoardProps) {
           className="board"
           ref={boardElRef}
           style={{ '--board-anim-ms': `${ANIMATION_DURATIONS_MS[settings.animationSpeed]}ms` } as CSSProperties}
+          onContextMenu={(e) => e.preventDefault()}
         >
           {displaySquares.map(({ square, piece }) => (
             <BoardSquare
@@ -277,9 +345,9 @@ export function Board(props: BoardProps) {
               isLastMoveFrom={lastMove?.from === square}
               isLastMoveTo={lastMove?.to === square}
               isCheck={kingInCheck === square}
-              isThreatened={threatenedSquares?.has(square) ?? false}
               coordDisplay={settings.coordDisplay}
               onSquareClick={onSquareClick}
+              onSquareRightDown={onSquareRightDown}
               onPieceDragStart={onPieceDragStart}
               onDragOverSquare={onDragOverSquare}
               onDropOnSquare={onDropOnSquare}
@@ -290,6 +358,20 @@ export function Board(props: BoardProps) {
             />
           ))}
           {animatingMove && <AnimatedPiece anim={animatingMove} onDone={onAnimationDone} />}
+          <ArrowLayer
+            arrows={arrows}
+            orientation={orientation}
+            preview={
+              arrowDraft
+                ? {
+                    from: arrowDraft.from,
+                    toX: arrowDraft.pointerX,
+                    toY: arrowDraft.pointerY,
+                    color: arrowColor,
+                  }
+                : null
+            }
+          />
           {touchDrag && (
             <div
               className="touch-ghost"

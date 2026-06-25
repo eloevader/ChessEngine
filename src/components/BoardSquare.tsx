@@ -1,3 +1,4 @@
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { Piece, Square } from '../chess/types';
 import { isLightSquare, fileOf, rankOf } from '../chess/board';
 import { pieceImageUrl } from '../chess/pieces';
@@ -12,10 +13,9 @@ interface SquareProps {
   isLastMoveFrom: boolean;
   isLastMoveTo: boolean;
   isCheck: boolean;
-  /** True when this square is attacked by the piece that just moved (review mode). */
-  isThreatened: boolean;
   coordDisplay: CoordDisplay;
   onSquareClick: (square: Square) => void;
+  onSquareRightDown: (square: Square, e: ReactMouseEvent) => void;
   onPieceDragStart: (square: Square, piece: Piece) => void;
   onDragOverSquare: (square: Square) => void;
   onDropOnSquare: (square: Square) => void;
@@ -75,9 +75,9 @@ export function BoardSquare(props: SquareProps) {
     isLastMoveFrom,
     isLastMoveTo,
     isCheck,
-    isThreatened,
     coordDisplay,
     onSquareClick,
+    onSquareRightDown,
     onPieceDragStart,
     onDragOverSquare,
     onDropOnSquare,
@@ -91,7 +91,6 @@ export function BoardSquare(props: SquareProps) {
   const classes: string[] = ['square', light ? 'light' : 'dark'];
   if (settings.highlightLastMove && (isLastMoveFrom || isLastMoveTo)) classes.push('last-move');
   if (settings.highlightCheck && isCheck && piece && piece.type === 'k') classes.push('in-check');
-  if (isThreatened) classes.push('threatened');
 
   const pieceClasses: string[] = ['piece', `piece-${piece?.color ?? 'w'}`];
   if (isSelected) pieceClasses.push('selected');
@@ -105,6 +104,12 @@ export function BoardSquare(props: SquareProps) {
       className={classes.join(' ')}
       data-square={square}
       onClick={() => onSquareClick(square)}
+      onMouseDown={(e) => {
+        if (e.button === 2) {
+          onSquareRightDown(square, e);
+        }
+      }}
+      onContextMenu={(e) => e.preventDefault()}
       onDragOver={(e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
@@ -162,7 +167,6 @@ export function BoardSquare(props: SquareProps) {
           style={isCaptureTarget ? { color: light ? 'rgba(0,0,0,0.30)' : 'rgba(255,255,255,0.40)' } : {}}
         />
       )}
-      {isThreatened && <div className="threat-dot" aria-hidden="true" />}
     </div>
   );
 }

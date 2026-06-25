@@ -23,7 +23,7 @@ import { useSound } from './settings/SoundManager';
 import { getTheme, themeToCss } from './chess/themes';
 import { useEngine } from './engine/useEngine';
 import { useChessClock } from './chess/ChessClock';
-import { useLastMoveThreats } from './chess/threats';
+import { useLastMoveThreatSquares, type Arrow, type ArrowColor } from './chess/threats';
 import './App.css';
 
 // ---------------- Types ----------------
@@ -139,16 +139,32 @@ function App() {
   const [drawOffer, setDrawOffer] = useState<'w' | 'b' | null>(null);
   /** True after the user clicks "Review" on the post-game prompt. */
   const [reviewing, setReviewing] = useState(false);
+  /** User-drawn arrows on the board (chess.com style). */
+  const [arrows, setArrows] = useState<Arrow[]>([]);
+  /** Currently selected arrow color for the next right-click drag. */
+  const [arrowColor, setArrowColor] = useState<ArrowColor>('green');
 
   // -------- Derived state --------
   const snapshot = game.snapshot();
-  // Threats (red highlights) are shown whenever the user is in a non-playing
-  // exploration mode — analysis (the default), or post-game review. They are
-  // never shown during a live local / vs-computer game.
+  // Auto threat arrows (red) are shown in analysis / review from the piece
+  // that just moved to each of the squares it attacks.
   const showThreatsNow =
     settings.showThreats &&
     (settings.gameMode === 'analysis' || reviewing);
-  const threatenedSquares = useLastMoveThreats(fen, showThreatsNow, lastMove);
+  const threatSquares = useLastMoveThreatSquares(fen, showThreatsNow, lastMove);
+  // Build the auto-arrow list: one red arrow from lastMove.to to each
+  // attacked square. (Last move is guaranteed to be set whenever
+  // threatSquares is non-empty.)
+  const threatArrows: Arrow[] = useMemo(() => {
+    if (!lastMove || threatSquares.size === 0) return [];
+    const out: Arrow[] = [];
+    for (const to of threatSquares) {
+      if (to === lastMove.to) continue;
+      out.push({ from: lastMove.to, to, color: 'red', auto: true });
+    }
+    return out;
+  }, [lastMove, threatSquares]);
+  const allArrows = useMemo(() => [...threatArrows, ...arrows], [threatArrows, arrows]);
   const board = useMemo(() => buildBoard(fen), [fen]);
   const kingInCheck = useMemo(
     () => (snapshot.inCheck ? findKingSquare(fen, snapshot.turn) : null),
@@ -370,7 +386,58 @@ function App() {
     setGameEndReason(null);
     setDrawOffer(null);
     setReviewing(false);
+    setArrows([]);
   };
+
+  // -------- Arrow drawing (right-click drag, chess.com style) --------
+  const onArrowDraw = useCallback(
+    (from: Square, to: Square, color: ArrowColor) => {
+      setArrows((prev) => {
+        // If an arrow in the same color exists in the same direction, remove it
+        // (toggling off). If one exists in the opposite direction with the
+        // same color, replace it.
+        const same = prev.findIndex(
+          (a) => a.from === from && a.to === to && a.color === color,
+        );
+        if (same >= 0) {
+          const next = prev.slice();
+          next.splice(same, 1);
+          return next;
+        }
+        const reverse = prev.findIndex(
+          (a) => a.from === to && a.to === from && a.color === color,
+        );
+        if (reverse >= 0) {
+          const next = prev.slice();
+          next.splice(reverse, 1);
+          next.push({ from, to, color });
+          return next;
+        }
+        // Remove any existing arrow from `from` in the same color (chess.com
+        // behavior: a square only has one arrow out of it per color).
+        const filtered = prev.filter(
+          (a) => !(a.from === from && a.color === color),
+        );
+        return [...filtered, { from, to, color }];
+      });
+    },
+    [],
+  );
+
+  const onArrowEraseAt = useCallback((square: Square) => {
+    setArrows((prev) => prev.filter((a) => a.from !== square && a.to !== square));
+  }, []);
+
+  const onClearArrows = useCallback(() => setArrows([]), []);
+
+  // Esc clears all user-drawn arrows
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setArrows([]);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const onStartNewGame = (config: GameConfig) => {
     resetGame();
@@ -657,7 +724,10 @@ function App() {
               lastMove={lastMove}
               kingInCheck={kingInCheck}
               animatingMove={animatingMove}
-              threatenedSquares={threatenedSquares}
+              arrows={allArrows}
+              arrowColor={arrowColor}
+              onArrowDraw={onArrowDraw}
+              onArrowEraseAt={onArrowEraseAt}
               onSquareClick={handleSquareClick}
               onPieceDragStart={handlePieceDragStart}
               onDragOverSquare={() => {}}
@@ -740,6 +810,29 @@ function App() {
               )}
             </div>
           )}
+          <div className="arrow-toolbar" role="toolbar" aria-label="Arrow tools">
+            <span className="arrow-toolbar-label">Arrow:</span>
+            {(['green', 'red', 'yellow', 'blue'] as ArrowColor[]).map((c) => (
+              <button
+                key={c}
+                type="button"
+                className={`arrow-swatch arrow-swatch-${c} ${arrowColor === c ? 'selected' : ''}`}
+                aria-label={`${c} arrow`}
+                title={`${c[0].toUpperCase()}${c.slice(1)} arrow`}
+                onClick={() => setArrowColor(c)}
+              />
+            ))}
+            <button
+              type="button"
+              className="arrow-clear-btn"
+              onClick={onClearArrows}
+              disabled={arrows.length === 0}
+              title="Clear all arrows (Esc)"
+            >
+              Clear
+            </button>
+            <span className="arrow-hint">Right-click + drag on the board to draw</span>
+          </div>
           <div className="controls">
             <button onClick={() => setNewGameOpen(true)}>New Game</button>
             <button

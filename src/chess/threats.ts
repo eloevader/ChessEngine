@@ -2,8 +2,8 @@ import { useMemo } from 'react';
 import type { Square } from '../chess/types';
 import { GameState } from './GameState';
 
-// Attack patterns: [fileDelta, rankDelta] where rankDelta is +1 for white
-// (moving up the board) and -1 for black (moving down the board).
+// ---------- Attack patterns ----------
+
 const KNIGHT_MOVES: [number, number][] = [
   [2, 1], [1, 2], [-1, 2], [-2, 1],
   [-2, -1], [-1, -2], [1, -2], [2, -1],
@@ -36,6 +36,22 @@ function squareToCoords(s: Square): { f: number; r: number } {
   return { f: s.charCodeAt(0) - 97, r: parseInt(s[1], 10) - 1 };
 }
 
+// ---------- Public types ----------
+
+/** Color buckets for arrows (chess.com style). */
+export type ArrowColor = 'green' | 'red' | 'yellow' | 'blue';
+
+/** A single arrow (or a single-circle highlight) on the board. */
+export interface Arrow {
+  from: Square;
+  to: Square;
+  color: ArrowColor;
+  /** True when the arrow originates from the last-moved piece (auto-drawn threat). */
+  auto?: boolean;
+}
+
+// ---------- Attack computation ----------
+
 /** Returns the set of squares attacked by the piece currently sitting on `from`. */
 function attacksFromSquare(fen: string, from: Square): Set<Square> {
   const game = new GameState(fen);
@@ -43,7 +59,6 @@ function attacksFromSquare(fen: string, from: Square): Set<Square> {
     .chess.board();
 
   const { f, r } = squareToCoords(from);
-  // board[0] is rank 8 (top), so convert our rank (1..8) to board index.
   const row = 7 - r;
   const col = f;
   const piece = board[row]?.[col] ?? null;
@@ -78,7 +93,7 @@ function attacksFromSquare(fen: string, from: Square): Set<Square> {
     let tr = row + dr;
     while (inBounds(tf, tr)) {
       squares.add(squareAt(tf, tr));
-      if (board[tr][tf]) break; // blocked by any piece (own or enemy)
+      if (board[tr][tf]) break;
       tf += df;
       tr += dr;
     }
@@ -87,22 +102,26 @@ function attacksFromSquare(fen: string, from: Square): Set<Square> {
   return squares;
 }
 
+// ---------- Hooks ----------
+
 /** Returns the set of squares attacked by the piece that just moved.
- *  Used during post-game review to highlight "if the opponent doesn't
- *  move, I could take this" in red.
- *
- *  - `enabled` should only be true in review mode.
- *  - `lastMove` is the most recent move (from -> to).
- *  - Returns an empty set when disabled or when no move has been played.
- */
-export function useLastMoveThreats(
+ *  Used during analysis / review to draw threat arrows in red. */
+export function useLastMoveThreatSquares(
   fen: string,
   enabled: boolean,
   lastMove: { from: Square; to: Square } | null,
 ): Set<Square> {
   return useMemo(() => {
     if (!enabled || !lastMove) return new Set();
-    // Use the destination square: that's where the piece now sits.
     return attacksFromSquare(fen, lastMove.to);
   }, [fen, enabled, lastMove]);
 }
+
+// ---------- Color presets (RGB so we can vary opacity) ----------
+
+export const ARROW_COLORS: Record<ArrowColor, string> = {
+  green: '157, 196, 85',   // chess.com green
+  red: '222, 80, 80',      // chess.com red
+  yellow: '234, 204, 65',  // chess.com yellow
+  blue: '85, 152, 222',    // chess.com blue
+};

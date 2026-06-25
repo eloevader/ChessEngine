@@ -549,34 +549,58 @@ body {
   box-sizing: border-box;
 }
 
-/* Red dot on squares attacked by the piece that just moved (review mode). */
-.square.threatened {
-  background-image: radial-gradient(
-    circle at center,
-    rgba(220, 38, 38, 0.85) 0%,
-    rgba(220, 38, 38, 0.85) 22%,
-    transparent 24%
-  );
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 100% 100%;
+/* Arrow toolbar (right-click-drag arrow drawing) */
+.arrow-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  margin: 6px 0 0 0;
+  flex-wrap: wrap;
 }
-.threat-dot {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
+.arrow-toolbar-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.arrow-swatch {
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  pointer-events: none;
-  z-index: 2;
-  box-shadow: inset 0 0 0 3px rgba(220, 38, 38, 0.9);
-  background: radial-gradient(
-    circle at center,
-    rgba(220, 38, 38, 0.35) 0%,
-    rgba(220, 38, 38, 0.35) 26%,
-    transparent 28%
-  );
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.1s ease, border-color 0.1s ease;
+  outline: none;
+}
+.arrow-swatch:hover { transform: scale(1.1); }
+.arrow-swatch.selected {
+  border-color: var(--text, #fff);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
+}
+.arrow-swatch-green { background: rgb(157, 196, 85); }
+.arrow-swatch-red   { background: rgb(222, 80, 80); }
+.arrow-swatch-yellow { background: rgb(234, 204, 65); }
+.arrow-swatch-blue  { background: rgb(85, 152, 222); }
+.arrow-clear-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid var(--panel-border);
+  background: var(--button-bg);
+  color: var(--text);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.arrow-clear-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.arrow-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 4px;
 }
 
 .coord-incell {
