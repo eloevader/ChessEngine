@@ -23,10 +23,19 @@ import { useSound } from './settings/SoundManager';
 import { getTheme, themeToCss } from './chess/themes';
 import { useEngine } from './engine/useEngine';
 import { useChessClock } from './chess/ChessClock';
-import { analyzeThreats, threatsToArrows, type Arrow, type ArrowColor } from './chess/threats';
+import { useLiveAttacks, type Arrow, type ArrowColor, type AttackDescription } from './chess/threats';
 import './App.css';
 
 // ---------------- Types ----------------
+
+const PIECE_DISPLAY: Record<string, string> = {
+  p: 'Pawn',
+  n: 'Knight',
+  b: 'Bishop',
+  r: 'Rook',
+  q: 'Queen',
+  k: 'King',
+};
 
 type PendingPromotion = {
   from: Square;
@@ -150,25 +159,17 @@ function App() {
 
   // -------- Derived state --------
   const snapshot = game.snapshot();
-  // Auto threat arrows are shown in analysis / review. We run the full
-  // bilateral ThreatAnalyzer and then filter to arrows that originate from
-  // the last-moved piece (so the visualization is "what does my move threaten").
+  // Live attack tracker. Per the spec: ONLY the piece that just moved is
+  // considered, and only enemy pieces on the attacked squares produce
+  // arrows. White's attack on Black → blue; Black's attack on White → red.
+  // If a target also attacks the moved piece back, both arrows are drawn
+  // (curved, fanning apart).
   const showThreatsNow =
     settings.showThreats &&
     (settings.gameMode === 'analysis' || reviewing);
-  const threatArrows: Arrow[] = useMemo(() => {
-    if (!showThreatsNow) return [];
-    const all = analyzeThreats(fen);
-    if (!lastMove) {
-      // No last move: show the full bilateral attack map.
-      return threatsToArrows(all).map((a) => ({ ...a, auto: true }));
-    }
-    // Only arrows from the last-moved piece.
-    return threatsToArrows(all.filter((t) => t.from === lastMove.to)).map((a) => ({
-      ...a,
-      auto: true,
-    }));
-  }, [fen, lastMove, showThreatsNow]);
+  const liveAttacks = useLiveAttacks(fen, showThreatsNow, lastMove?.to ?? null);
+  const threatArrows: Arrow[] = liveAttacks.arrows;
+  const attackDescriptions: AttackDescription[] = liveAttacks.descriptions;
   const allArrows = useMemo(() => [...threatArrows, ...arrows], [threatArrows, arrows]);
   const board = useMemo(() => buildBoard(fen), [fen]);
   const kingInCheck = useMemo(
@@ -826,6 +827,27 @@ function App() {
             />
           )}
           <CapturedRow captures={captures} side={bottomSide} />
+          {showThreatsNow && attackDescriptions.length > 0 && (
+            <div className="attack-panel" role="status" aria-live="polite">
+              {attackDescriptions.map((d, i) => {
+                const pieceName = PIECE_DISPLAY[d.attackerType] ?? d.attackerType.toUpperCase();
+                const targetName = PIECE_DISPLAY[d.targetType] ?? d.targetType.toUpperCase();
+                const side = d.attackerColor === 'w' ? 'White' : 'Black';
+                const opp = d.attackerColor === 'w' ? 'Black' : 'White';
+                return (
+                  <div key={i} className="attack-line">
+                    <span className={`attack-side attack-side-${d.attackerColor}`}>{side}</span>
+                    <span className="attack-piece">{"\u265E "}{pieceName}</span>
+                    <span className="attack-square">on {d.attackerSquare}</span>
+                    <span className="attack-verb">is attacking</span>
+                    <span className={`attack-side attack-side-${d.attackerColor === 'w' ? 'b' : 'w'}`}>{opp}</span>
+                    <span className="attack-piece">{"\u265F "}{targetName}</span>
+                    <span className="attack-square">on {d.targetSquare}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
           {isGameEnded && !isReviewMode && (
             <div className="post-game-actions">
               <button className="primary-action" onClick={onReview}>
