@@ -123,7 +123,11 @@ export function LichessImportDialog({ open, onClose, onSelect }: LichessImportDi
                   >
                     <div className="lichess-game-line1">
                       <span className="lichess-players">
-                        {g.white} vs {g.black}
+                        {g.white}
+                        {g.whiteRating && <span className="lichess-rating"> ({g.whiteRating})</span>}
+                        {' vs '}
+                        {g.black}
+                        {g.blackRating && <span className="lichess-rating"> ({g.blackRating})</span>}
                       </span>
                       <span className={`lichess-result lichess-${g.result.replace('/', '-').replace('*', 'star')}`}>
                         {g.result}

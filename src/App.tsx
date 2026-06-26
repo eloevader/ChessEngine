@@ -8,6 +8,7 @@ import { EvalBar } from './components/EvalBar';
 import { ClockDisplay } from './components/ClockDisplay';
 import { NewGameDialog } from './components/NewGameDialog';
 import { LichessImportDialog } from './components/LichessImportDialog';
+import { ConfirmDialog } from './components/ConfirmDialog';
 import { GameState, type LegalMove } from './chess/GameState';
 import type { Piece, Square } from './chess/types';
 import {
@@ -139,6 +140,11 @@ function App() {
   const [animatingMove, setAnimatingMove] = useState<AnimatingMove>(null);
   const [settingsOpen, setSettingsOpen] = useState(settings.showSettingsOnStart);
   const [newGameOpen, setNewGameOpen] = useState(false);
+  /** True when the user has expanded the board to fill the
+   *  viewport (chess.com / Lichess "fullscreen board" mode). The
+   *  side panel is hidden in this mode; the user can click an exit
+   *  button (or press Esc) to return. */
+  const [boardFullscreen, setBoardFullscreen] = useState(false);
   const [captures, setCaptures] = useState<{ white: Piece[]; black: Piece[] }>({
     white: [],
     black: [],
@@ -176,6 +182,12 @@ function App() {
   const [pendingPreMoveFrom, setPendingPreMoveFrom] = useState<Square | null>(
     null,
   );
+  /** Per-ply clock snapshot: how many seconds were left on the
+   *  mover's clock at the time each move was played. Used to
+   *  display a time column in the move list when reviewing a
+   *  game played with a clock. Index = ply (0 = starting position,
+   *  1 = after move 1, etc.). */
+  const [moveTimes, setMoveTimes] = useState<number[]>([0]);
   const preMove = preMoveQueue[0] ?? null;
   const preMovesEnabled = settings.gameMode === 'computer';
   // Number of pre-moves that have already been queued (excluding the
@@ -184,6 +196,10 @@ function App() {
 
   // -------- Derived state --------
   const snapshot = game.snapshot();
+  // Whether we're in a mode where the human is actually playing
+  // (vs Local or vs Computer) and the game is still in progress.
+  // Used to gate in-app and browser-level "leave / clobber" prompts.
+  const isLivePlay = settings.gameMode === 'local' || settings.gameMode === 'computer';
   // Live attack tracker. Per the spec: ONLY the piece that just moved is
   // considered, and only enemy pieces on the attacked squares produce
   // arrows. White's attack on Black → blue; Black's attack on White → red.
@@ -311,10 +327,18 @@ function App() {
       setFen(game.fen());
       setViewPly((v) => v + 1);
       setFullHistory((h) => [...h, result.san]);
-
       if (clockEnabled) {
+        // Snapshot the time left on the mover's clock (after the
+        // increment) for the move list. Convention: store the time
+        // REMAINING on the mover's clock after the move.
+        const moverSide = result.color;
+        const remaining = moverSide === 'w' ? clock.whiteSeconds : clock.blackSeconds;
+        const finalTime = remaining + clock.incrementSeconds;
+        setMoveTimes((t) => [...t, finalTime]);
         clock.addIncrement(result.color);
         clock.switchTo(game.turn());
+      } else {
+        setMoveTimes((t) => [...t, 0]);
       }
 
       if (captured) {
@@ -887,18 +911,49 @@ function App() {
     }
   }, [isReviewMode, clock]);
 
-  // Draw / resign only in play modes
-  const canOfferDraw = isPlayMode(settings.gameMode);
-  const canResign = isPlayMode(settings.gameMode);
+  // Esc key exits fullscreen board mode.
+  useEffect(() => {
+    if (!boardFullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setBoardFullscreen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [boardFullscreen]);
+
+  // If the user is in the middle of a live game, warn them before
+  // they navigate away (refresh, close tab, back button). This is
+  // a browser-native confirm dialog — it can't be styled but it
+  // works reliably.
+  useEffect(() => {
+    if (!isLivePlay || isGameEnded) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      // Modern browsers ignore the custom message and show their own.
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isLivePlay, isGameEnded]);
+
+  // Also intercept in-app navigation buttons (the "Lichess" import
+  // or "New Game" button) so they prompt before clobbering an
+  // in-progress game.
+
+  // Draw / resign only in play modes. We do NOT allow draw offers
+  // against the computer (the engine can't accept / decline) — the
+  // user can just resign or play on. Resign always asks for
+  // confirmation via a modal so a stray click doesn't end the game.
+  const canOfferDraw = settings.gameMode === 'local';
+  const canResign = isLivePlay;
+  const [resignPrompt, setResignPrompt] = useState<{
+    side: 'w' | 'b';
+  } | null>(null);
+  const [leavePrompt, setLeavePrompt] = useState<null | 'unsaved' | 'live'>(null);
 
   const onOfferDraw = () => {
     if (!canOfferDraw) return;
     if (isGameEnded) return;
-    if (settings.gameMode === 'computer') {
-      // Engine would normally accept/reject; we just decline
-      emit({ type: 'illegal' });
-      return;
-    }
     setDrawOffer(game.turn());
   };
   const onAcceptDraw = () => {
@@ -911,10 +966,15 @@ function App() {
     if (!canResign || isGameEnded) return;
     if (settings.gameMode === 'computer' && engineSide !== null) {
       const human: 'w' | 'b' = engineSide === 'w' ? 'b' : 'w';
-      setGameEndReason({ kind: 'resign', side: human });
+      setResignPrompt({ side: human });
     } else {
-      setGameEndReason({ kind: 'resign', side: game.turn() });
+      setResignPrompt({ side: game.turn() });
     }
+  };
+  const confirmResign = () => {
+    if (!resignPrompt) return;
+    setGameEndReason({ kind: 'resign', side: resignPrompt.side });
+    setResignPrompt(null);
   };
 
   const onReview = () => {
@@ -1128,7 +1188,9 @@ function App() {
   const topSide: 'w' | 'b' = orientation === 'w' ? 'b' : 'w';
 
   return (
-    <div className={`app ${isReviewMode ? 'review-mode' : ''}`}>
+    <div
+      className={`app ${isReviewMode ? 'review-mode' : ''} ${boardFullscreen ? 'board-fullscreen' : ''}`}
+    >
       <main className="app-main">
         <div className="board-area">
           <header className="app-header">
@@ -1369,35 +1431,79 @@ function App() {
             <span className="arrow-hint">Right-click + drag on the board to draw</span>
           </div>
           <div className="controls">
-            <button onClick={() => setNewGameOpen(true)}>New Game</button>
-            <button
-              onClick={() => setLichessOpen(true)}
-              title="Import a game from Lichess"
-            >
-              Lichess
-            </button>
-            <button
-              onClick={onUndo}
-              disabled={
-                settings.gameMode !== 'computer' ||
-                fullHistory.length === 0 ||
-                animatingMove !== null ||
-                isGameEnded
-              }
-              title={
-                settings.gameMode === 'computer'
-                  ? 'Undo last move'
-                  : 'Undo only available vs Computer'
-              }
-            >
-              Undo
-            </button>
+            {/*
+              During an active play (local or vs computer) the user
+              can only: Undo (computer only), Flip, or open Settings.
+              The "New Game" and "Lichess import" buttons are hidden
+              so the user can't accidentally clobber an in-progress
+              game. Resign and Draw are shown as game actions below.
+            */}
+            {!isLivePlay && (
+              <button onClick={() => setNewGameOpen(true)}>New Game</button>
+            )}
+            {!isLivePlay && !isGameEnded && fullHistory.length > 0 && (
+              <button
+                onClick={() => {
+                  if (window.confirm('This will discard your current game. Continue?')) {
+                    setNewGameOpen(true);
+                  }
+                }}
+              >
+                New Game
+              </button>
+            )}
+            {!isLivePlay && (
+              <button
+                onClick={() => setLichessOpen(true)}
+                title="Import a game from Lichess"
+              >
+                Lichess
+              </button>
+            )}
+            {!isLivePlay && isGameEnded && fullHistory.length > 0 && (
+              <button
+                onClick={() => {
+                  if (window.confirm('Replace the current game with an imported one?')) {
+                    setLichessOpen(true);
+                  }
+                }}
+                title="Import a game from Lichess"
+              >
+                Lichess
+              </button>
+            )}
+            {isLivePlay && (
+              <button
+                onClick={onUndo}
+                disabled={
+                  settings.gameMode !== 'computer' ||
+                  fullHistory.length === 0 ||
+                  animatingMove !== null ||
+                  isGameEnded
+                }
+                title={
+                  settings.gameMode === 'computer'
+                    ? 'Undo last move'
+                    : 'Undo only available vs Computer'
+                }
+              >
+                Undo
+              </button>
+            )}
             <button onClick={onFlip}>Flip</button>
+            <button
+              onClick={() => setBoardFullscreen((v) => !v)}
+              title={boardFullscreen ? 'Exit fullscreen' : 'Expand board to fullscreen'}
+              aria-label="Toggle board fullscreen"
+            >
+              {boardFullscreen ? '⤡ Exit' : '⤢ Fullscreen'}
+            </button>
             <button onClick={() => setSettingsOpen(true)} aria-label="Open settings">
               Settings
             </button>
           </div>
         </div>
+        {!boardFullscreen && (
         <aside className="side-panel">
           <div className="side-panel-spacer" aria-hidden="true" />
           <MoveHistory
@@ -1410,6 +1516,7 @@ function App() {
             onJumpForward={onJumpForward}
             onJumpEnd={onJumpEnd}
             classifications={moveClassifications.classifications}
+            moveTimes={moveTimes}
             bulkProgress={
               moveClassifications.bulkLoading
                 ? { done: moveClassifications.evaluatedPlies, total: moveClassifications.totalPlies }
@@ -1417,6 +1524,7 @@ function App() {
             }
           />
         </aside>
+        )}
       </main>
       {pendingPromotion && (
         <PromotionDialog
@@ -1436,6 +1544,39 @@ function App() {
         onClose={() => setLichessOpen(false)}
         onSelect={onSelectLichessGame}
       />
+      {resignPrompt && (
+        <ConfirmDialog
+          title="Resign this game?"
+          message={
+            resignPrompt.side === 'w'
+              ? 'You will lose as White. Are you sure?'
+              : 'You will lose as Black. Are you sure?'
+          }
+          confirmLabel="Resign"
+          confirmClass="danger-action"
+          onConfirm={confirmResign}
+          onCancel={() => setResignPrompt(null)}
+        />
+      )}
+      {leavePrompt && (
+        <ConfirmDialog
+          title={leavePrompt === 'live' ? 'Leave this game?' : 'Replace this game?'}
+          message={
+            leavePrompt === 'live'
+              ? 'A game is in progress. Your move time will continue if you come back.'
+              : 'Loading a new game will replace the current one.'
+          }
+          confirmLabel="Continue"
+          confirmClass="danger-action"
+          onConfirm={() => {
+            setLeavePrompt(null);
+            if (leavePrompt === 'live') {
+              // user confirmed leaving a live game; do nothing else
+            }
+          }}
+          onCancel={() => setLeavePrompt(null)}
+        />
+      )}
     </div>
   );
 }

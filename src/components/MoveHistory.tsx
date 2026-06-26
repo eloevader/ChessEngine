@@ -17,6 +17,11 @@ interface MoveHistoryProps {
   /** Bulk-eval progress: { done, total }. When present and
    *  done < total, a loading indicator is shown. */
   bulkProgress?: { done: number; total: number } | null;
+  /** Per-ply remaining-time snapshots. Index = ply (0 = starting
+   *  position, 1 = after move 1, etc.). A value of 0 means "no
+   *  clock was running when this move was played" and the time
+   *  column is hidden for that ply. */
+  moveTimes?: number[];
 }
 
 const TAG_LABEL: Record<MoveTag, string> = {
@@ -42,6 +47,7 @@ export function MoveHistory({
   onJumpEnd,
   classifications,
   bulkProgress,
+  moveTimes,
 }: MoveHistoryProps) {
   const rows: { num: number; white?: string; black?: string; whiteIndex: number; blackIndex: number }[] =
     [];
@@ -122,38 +128,58 @@ export function MoveHistory({
         {rows.map((r) => {
           const wTag = tagFor(r.whiteIndex + 1);
           const bTag = tagFor(r.blackIndex + 1);
-          return (
+  // Format a clock time in seconds as "M:SS".
+  const fmtTime = (sec: number) => {
+    if (sec <= 0) return '';
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+  const showTimeCol =
+    !!moveTimes && moveTimes.some((t) => t > 0);
+
+  return (
             <div key={r.num} className="move-row">
               <span className="move-num">{r.num}.</span>
-              <button
-                className={`move-cell ${currentPly === r.whiteIndex + 1 ? 'active' : ''} ${currentPly > r.whiteIndex + 1 ? 'past' : ''}`}
-                onClick={() => onJumpTo(r.whiteIndex + 1)}
-                title={
-                  wTag
-                    ? `${r.white} — ${TAG_LABEL[wTag]}`
-                    : r.white
-                }
-              >
-                <span className="move-text">{r.white ?? ''}</span>
-                {wTag && (
-                  <span className={`move-icon icon-${wTag}`}>
-                    <TagIcon tag={wTag} size={14} />
-                  </span>
-                )}
-              </button>
-              <button
-                className={`move-cell ${currentPly === r.blackIndex + 1 ? 'active' : ''} ${currentPly > r.blackIndex + 1 ? 'past' : ''}`}
-                disabled={!r.black}
-                onClick={() => r.black !== undefined && onJumpTo(r.blackIndex + 1)}
-                title={bTag ? `${r.black} — ${TAG_LABEL[bTag]}` : r.black}
-              >
-                <span className="move-text">{r.black ?? ''}</span>
-                {bTag && (
-                  <span className={`move-icon icon-${bTag}`}>
-                    <TagIcon tag={bTag} size={14} />
-                  </span>
-                )}
-              </button>
+            <button
+              className={`move-cell ${currentPly === r.whiteIndex + 1 ? 'active' : ''} ${currentPly > r.whiteIndex + 1 ? 'past' : ''}`}
+              onClick={() => onJumpTo(r.whiteIndex + 1)}
+              title={
+                wTag
+                  ? `${r.white} — ${TAG_LABEL[wTag]}`
+                  : r.white
+              }
+            >
+              <span className="move-text">{r.white ?? ''}</span>
+              {wTag && (
+                <span className={`move-icon icon-${wTag}`}>
+                  <TagIcon tag={wTag} size={14} />
+                </span>
+              )}
+            </button>
+            {showTimeCol && (
+              <span className="move-time">
+                {moveTimes && fmtTime(moveTimes[r.whiteIndex + 1] ?? 0)}
+              </span>
+            )}
+            <button
+              className={`move-cell ${currentPly === r.blackIndex + 1 ? 'active' : ''} ${currentPly > r.blackIndex + 1 ? 'past' : ''}`}
+              disabled={!r.black}
+              onClick={() => r.black !== undefined && onJumpTo(r.blackIndex + 1)}
+              title={bTag ? `${r.black} — ${TAG_LABEL[bTag]}` : r.black}
+            >
+              <span className="move-text">{r.black ?? ''}</span>
+              {bTag && (
+                <span className={`move-icon icon-${bTag}`}>
+                  <TagIcon tag={bTag} size={14} />
+                </span>
+              )}
+            </button>
+            {showTimeCol && r.black && (
+              <span className="move-time">
+                {moveTimes && fmtTime(moveTimes[r.blackIndex + 1] ?? 0)}
+              </span>
+            )}
             </div>
           );
         })}

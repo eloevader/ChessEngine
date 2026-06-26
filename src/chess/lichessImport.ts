@@ -22,6 +22,8 @@ export interface LichessGameSummary {
   pgn: string;
   white: string;
   black: string;
+  whiteRating: string;
+  blackRating: string;
   result: string; // "1-0", "0-1", "1/2-1/2", "*"
   date: string;
   speed: string;
@@ -69,6 +71,10 @@ export async function fetchLichessGames(
         pgn: chunk,
         white: parsed.headers.White ?? '?',
         black: parsed.headers.Black ?? '?',
+        // Rating, if Lichess included it in the PGN. Stored as
+        // "name (rating)" so the dialog can show it.
+        whiteRating: parsed.headers.WhiteElo ?? '',
+        blackRating: parsed.headers.BlackElo ?? '',
         result: parsed.headers.Result ?? '*',
         date: parsed.headers.Date ?? '',
         speed: parsed.headers.Event?.replace(/^rated\s+/i, '') ?? '',

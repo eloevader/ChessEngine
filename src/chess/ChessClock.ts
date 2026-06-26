@@ -10,6 +10,8 @@ export interface ClockConfig {
 export interface ChessClock {
   whiteSeconds: number;
   blackSeconds: number;
+  /** Increment in seconds, exposed for callers that need to read it. */
+  incrementSeconds: number;
   /** Whose clock is currently running. null if paused / game over. */
   running: 'w' | 'b' | null;
   /** Who ran out of time, if any. */
@@ -91,6 +93,7 @@ export function useChessClock(initial?: ClockConfig): ChessClock {
 
   return {
     whiteSeconds,
+    incrementSeconds: initialRef.current?.incrementSeconds ?? 0,
     blackSeconds,
     running,
     winner,

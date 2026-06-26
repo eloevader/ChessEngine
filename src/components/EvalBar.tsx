@@ -74,16 +74,24 @@ export function EvalBar({
     }
   } else if (scoreCp !== null && Number.isFinite(scoreCp)) {
     fraction = scoreToFraction(scoreCp);
-    // Show one decimal for clarity once the score is meaningful.
+    // Suppress the "0.00" dance: if the engine's first info line
+    // is depth 1 with cp=0, we'd briefly flash "+0.00" before the
+    // real eval arrives. Instead, show "d1" until the depth grows
+    // past 1, OR keep showing the depth-only label if the eval is
+    // exactly 0 at very low depth.
     const abs = Math.abs(scoreCp);
-    if (abs >= 1000) {
-      label = (scoreCp / 100).toFixed(1);
-    } else if (abs >= 100) {
-      label = (scoreCp / 100).toFixed(2);
+    if (abs < 5 && bestLine && bestLine.depth <= 2) {
+      label = `d${bestLine.depth}`;
     } else {
-      label = (scoreCp / 100).toFixed(2);
+      if (abs >= 1000) {
+        label = (scoreCp / 100).toFixed(1);
+      } else if (abs >= 100) {
+        label = (scoreCp / 100).toFixed(2);
+      } else {
+        label = (scoreCp / 100).toFixed(2);
+      }
+      if (scoreCp > 0) label = '+' + label;
     }
-    if (scoreCp > 0) label = '+' + label;
     mateInProgress = false;
   }
 
