@@ -14,6 +14,9 @@ interface MoveHistoryProps {
   /** Per-ply classification (optional). When present, each move
    *  gets a colored tag dot. */
   classifications?: ClassifiedPly[];
+  /** Bulk-eval progress: { done, total }. When present and
+   *  done < total, a loading indicator is shown. */
+  bulkProgress?: { done: number; total: number } | null;
 }
 
 const TAG_LABEL: Record<MoveTag, string> = {
@@ -38,6 +41,7 @@ export function MoveHistory({
   onJumpForward,
   onJumpEnd,
   classifications,
+  bulkProgress,
 }: MoveHistoryProps) {
   const rows: { num: number; white?: string; black?: string; whiteIndex: number; blackIndex: number }[] =
     [];
@@ -66,6 +70,14 @@ export function MoveHistory({
     <div className="move-history">
       <div className="move-history-header">
         <h3>Moves</h3>
+        {bulkProgress && bulkProgress.done < bulkProgress.total && (
+          <span className="bulk-progress" title="Calculating move evaluations">
+            <span className="bulk-spinner" />
+            <span className="bulk-text">
+              {bulkProgress.done} / {bulkProgress.total}
+            </span>
+          </span>
+        )}
         <div className="move-nav">
           <button
             className="nav-btn"

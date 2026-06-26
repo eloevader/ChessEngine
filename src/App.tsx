@@ -211,11 +211,14 @@ function App() {
   // Move classification: only enabled in analysis / review. In live
   // play (local or computer) we don't run the classifier so the
   // engine doesn't have to evaluate historical positions.
+  // In review mode, run a bulk pre-pass so all moves are evaluated
+  // up front; in analysis, evaluate lazily as the user navigates.
   const moveClassifications = useMoveClassification({
     history: fullHistory,
     evaluate: engine.evalPosition,
     viewPly,
     enabled: settings.gameMode === 'analysis' || reviewing,
+    bulk: reviewing,
   });
 
   // Per-square map of move annotations for the move the user is
@@ -1146,6 +1149,13 @@ function App() {
                 {' • '}{moveClassifications.openingName}
               </span>
             )}
+            {moveClassifications.bulkLoading && (
+              <span className="lichess-info">
+                {' • analyzing '}
+                {moveClassifications.evaluatedPlies}/
+                {moveClassifications.totalPlies}…
+              </span>
+            )}
             {preMovesEnabled && queuedCount > 0 && (
               <span className="lichess-info">
                 {' • pre-move'}{queuedCount > 1 ? 's' : ''} queued
@@ -1400,6 +1410,11 @@ function App() {
             onJumpForward={onJumpForward}
             onJumpEnd={onJumpEnd}
             classifications={moveClassifications.classifications}
+            bulkProgress={
+              moveClassifications.bulkLoading
+                ? { done: moveClassifications.evaluatedPlies, total: moveClassifications.totalPlies }
+                : null
+            }
           />
         </aside>
       </main>
