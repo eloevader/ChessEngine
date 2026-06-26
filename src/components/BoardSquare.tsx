@@ -3,6 +3,8 @@ import type { Piece, Square } from '../chess/types';
 import { isLightSquare, fileOf, rankOf } from '../chess/board';
 import { pieceImageUrl } from '../chess/pieces';
 import { useSettings, type CoordDisplay } from '../settings/SettingsStore';
+import { TagIcon } from '../chess/moveIcons';
+import type { MoveTag } from '../chess/classifier';
 
 interface SquareProps {
   square: Square;
@@ -20,8 +22,8 @@ interface SquareProps {
   moveLabel?: string;
   /** Optional annotation tag for the move that just landed on this
    *  square (e.g. "brilliant", "great", "blunder"). Rendered as
-   *  a colored glyph over the piece. */
-  moveTag?: { tag: string; label: string } | null;
+   *  a chess.com-style icon in the top-right of the square. */
+  moveTag?: { tag: MoveTag; label: string } | null;
   coordDisplay: CoordDisplay;
   onSquareClick: (square: Square) => void;
   onSquareRightDown: (square: Square, e: ReactMouseEvent) => void;
@@ -32,21 +34,6 @@ interface SquareProps {
   onPieceTouchStart: (square: Square, piece: Piece, e: React.TouchEvent) => void;
   onPieceTouchMove: (square: Square, e: React.TouchEvent) => void;
   onPieceTouchEnd: (square: Square) => void;
-}
-
-function tagGlyph(tag: string): string {
-  switch (tag) {
-    case 'brilliant': return '!!';
-    case 'great': return '!';
-    case 'best': return '★';
-    case 'book': return '📖';
-    case 'good': return '';
-    case 'inaccuracy': return '?!';
-    case 'mistake': return '?';
-    case 'blunder': return '??';
-    case 'neutral': return '';
-    default: return '';
-  }
 }
 
 function inCellCoords(square: Square, mode: CoordDisplay): { tl?: string; br?: string } {
@@ -171,10 +158,10 @@ export function BoardSquare(props: SquareProps) {
       )}
       {moveTag && (
         <span
-          className={`move-annotation tag-${moveTag.tag} ${isLight ? 'on-light' : 'on-dark'}`}
+          className={`move-annotation ${isLight ? 'on-light' : 'on-dark'}`}
           title={moveTag.label}
         >
-          {tagGlyph(moveTag.tag)}
+          <TagIcon tag={moveTag.tag} size={20} />
         </span>
       )}
       {piece && (

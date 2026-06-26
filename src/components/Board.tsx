@@ -4,6 +4,7 @@ import { BoardSquare } from './BoardSquare';
 import { ArrowLayer } from './ArrowLayer';
 import { FILES, RANKS } from '../chess/board';
 import type { Square, Piece } from '../chess/types';
+import type { MoveTag } from '../chess/classifier';
 import { useSettings, ANIMATION_DURATIONS_MS } from '../settings/SettingsStore';
 import { pieceImageUrl } from '../chess/pieces';
 import type { Arrow, ArrowColor } from '../chess/threats';
@@ -29,7 +30,7 @@ interface BoardProps {
   preMoveHighlights?: Array<{ from: Square; to: Square; pending?: boolean }> | null;
   /** Optional annotation for the move that landed on a given square.
    *  Map keyed by destination square (e.g. "e4"). */
-  moveTagsByTo?: Map<Square, { tag: string; label: string }>;
+  moveTagsByTo?: Map<Square, { tag: MoveTag; label: string }>;
   onArrowDraw: (from: Square, to: Square, color: ArrowColor) => void;
   onArrowEraseAt: (square: Square) => void;
   onSquareRightClick: (square: Square, color: ArrowColor) => void;

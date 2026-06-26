@@ -26,6 +26,7 @@ import { useEngine } from './engine/useEngine';
 import { useChessClock } from './chess/ChessClock';
 import { useLiveAttacks, type Arrow, type ArrowColor, type AttackDescription } from './chess/threats';
 import { useMoveClassification } from './chess/useMoveClassification';
+import type { MoveTag } from './chess/classifier';
 import './App.css';
 
 // ---------------- Types ----------------
@@ -218,12 +219,10 @@ function App() {
   });
 
   // Per-square map of move annotations for the move the user is
-  // currently viewing. Keyed by the move's destination square.
-  // We only show the tag for the move that just played (or the one
-  // the user navigated to). chess.com-style: tag floats over the
-  // piece that just moved.
+  // currently viewing. Keyed by the move's destination square (the
+  // piece's NEW position — chess.com style).
   const moveTagsByTo = useMemo(() => {
-    const out = new Map<Square, { tag: string; label: string }>();
+    const out = new Map<Square, { tag: MoveTag; label: string }>();
     if (viewPly <= 0) return out;
     if (viewPly > fullHistory.length) return out;
     const c = moveClassifications.classifications[viewPly - 1];
@@ -274,6 +273,21 @@ function App() {
     (from: Square, to: Square, promotion?: 'q' | 'r' | 'b' | 'n') => {
       const piece = game.pieceAt(from);
       if (!piece) return null;
+      // If we're in review mode and the user makes a move from a
+      // mid-game position, exit review and resume the game
+      // (chess.com-style "Return to game from this move").
+      if (reviewing && (snapshot.isGameOver || gameEndReason)) {
+        setReviewing(false);
+        const replay = fullHistory.slice(0, viewPly);
+        game.reset();
+        for (const san of replay) {
+          try {
+            game.moveSan(san);
+          } catch {
+            break;
+          }
+        }
+      }
       const result = game.move(from, to, promotion);
       if (!result) {
         emit({ type: 'illegal' });
@@ -323,7 +337,18 @@ function App() {
       }
       return result;
     },
-    [clock, clockEnabled, emit, settings.animationSpeed, settings.flipAfterMove],
+    [
+      clock,
+      clockEnabled,
+      emit,
+      settings.animationSpeed,
+      settings.flipAfterMove,
+      reviewing,
+      fullHistory,
+      viewPly,
+      snapshot.isGameOver,
+      gameEndReason,
+    ],
   );
 
   // -------- Click handling --------
@@ -827,33 +852,20 @@ function App() {
   const onJumpTo = (ply: number) => jumpToPly(ply);
   const onJumpStart = () => jumpToPly(0);
   const onJumpBack = () => jumpToPly(Math.max(0, viewPly - 1));
-  // "Next" jumps to the *next human move* — in computer mode that
-  // means skipping the computer's reply. The human's turn plies are
-  // 1, 3, 5, ... if human is white; 2, 4, 6, ... if human is black.
-  const onJumpForward = () => {
-    if (settings.gameMode !== 'computer' || engineSide === null) {
-      jumpToPly(Math.min(fullHistory.length, viewPly + 1));
-      return;
-    }
-    const humanColor: 'w' | 'b' = engineSide === 'w' ? 'b' : 'w';
-    // Find the smallest ply > viewPly where it's the human's turn.
-    // Human's turn occurs at ply numbers: if human=white, odd; if
-    // human=black, even.
-    const targetParity = humanColor === 'w' ? 1 : 0;
-    let next = viewPly + 1;
-    while (next < fullHistory.length && next % 2 !== targetParity) {
-      next += 1;
-    }
-    jumpToPly(Math.min(fullHistory.length, next));
-  };
+  // One click = one move forward, regardless of which color made
+  // the next move. Matches the standard chess.com / Lichess behavior.
+  const onJumpForward = () =>
+    jumpToPly(Math.min(fullHistory.length, viewPly + 1));
   const onJumpEnd = () => jumpToPly(fullHistory.length);
 
   const onFlip = () => setOrientation((o) => (o === 'w' ? 'b' : 'w'));
 
   // -------- Game end / review --------
   const isGameEnded = !!(snapshot.isGameOver || gameEndReason);
+  const isReviewMode = reviewing && isGameEnded;
 
-  // Auto-stop engine if game ended
+  // Auto-stop engine if game ended. Also stop the clock so the
+  // user can review without the time ticking.
   useEffect(() => {
     if (isGameEnded) {
       void engineStop();
@@ -862,6 +874,15 @@ function App() {
       setPendingPreMoveFrom(null);
     }
   }, [isGameEnded, clock, engineStop]);
+
+  // Pause the clock whenever we're in review mode (chess.com-style:
+  // review freezes the clock so the user can analyze without
+  // pressure).
+  useEffect(() => {
+    if (isReviewMode) {
+      clock.switchTo(null);
+    }
+  }, [isReviewMode, clock]);
 
   // Draw / resign only in play modes
   const canOfferDraw = isPlayMode(settings.gameMode);
@@ -1048,7 +1069,6 @@ function App() {
   const showEvalBar =
     settings.evalBarEnabled &&
     (settings.gameMode === 'analysis' || reviewing);
-  const isReviewMode = reviewing && isGameEnded;
 
   // Stockfish reports scores from the side-to-move's perspective. The eval
   // bar is always drawn from White's perspective, so flip the sign when it's
@@ -1105,7 +1125,7 @@ function App() {
   const topSide: 'w' | 'b' = orientation === 'w' ? 'b' : 'w';
 
   return (
-    <div className="app">
+    <div className={`app ${isReviewMode ? 'review-mode' : ''}`}>
       <main className="app-main">
         <div className="board-area">
           <header className="app-header">

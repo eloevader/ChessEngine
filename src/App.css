@@ -44,6 +44,12 @@ body {
   padding: 16px 20px 32px;
 }
 
+/* Review mode: dim the board slightly so the user knows they're
+ * in analysis, not playing (chess.com-style). */
+.app.review-mode .board {
+  filter: brightness(0.94) saturate(0.92);
+}
+
 .app-header { text-align: center; margin-bottom: 4px; }
 .app-header h1 {
   margin: 0;
@@ -911,35 +917,18 @@ body {
 }
 .lichess-info::before { content: ''; }
 
-/* On-board move annotation (chess.com-style). Shown as a colored
- * glyph over the piece that just moved, at the bottom-right of
- * the destination square. */
+/* On-board move annotation (chess.com-style). The icon is shown
+ * at the top-right of the destination square of the currently-
+ * viewed move, exactly where chess.com puts it. */
 .move-annotation {
   position: absolute;
-  bottom: 1px;
-  right: 2px;
-  font-size: 9px;
-  font-weight: 800;
-  font-family: ui-monospace, Consolas, monospace;
+  top: -2px;
+  right: -2px;
   pointer-events: none;
-  z-index: 5;
-  line-height: 1;
-  padding: 1px 4px;
-  border-radius: 8px;
-  letter-spacing: 0.3px;
-  text-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+  z-index: 6;
+  line-height: 0;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.7));
 }
-.move-annotation.on-light { /* same colors regardless of square */ }
-.move-annotation.tag-brilliant { background: #1abc9c; color: white; }
-.move-annotation.tag-great { background: #2ecc71; color: white; }
-.move-annotation.tag-best { background: #2ecc71; color: white; opacity: 0.85; }
-.move-annotation.tag-book { background: #5b8def; color: white; }
-.move-annotation.tag-inaccuracy { background: #f1c40f; color: #222; }
-.move-annotation.tag-mistake { background: #e67e22; color: white; }
-.move-annotation.tag-blunder { background: #e74c3c; color: white; }
-.move-annotation.tag-good { display: none; }
-.move-annotation.tag-neutral { display: none; }
 .coord-incell.on-light {
   color: rgba(0, 0, 0, 0.55);
   text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5);
@@ -1178,26 +1167,17 @@ body {
 .move-cell:disabled { color: var(--text-dim); cursor: default; }
 .empty { color: var(--text-dim); font-size: 13px; padding: 6px 0; }
 
-/* Move-classification tags (chess.com-style). */
-.move-cell .move-tag {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 0 4px;
-  font-size: 10px;
-  font-weight: 700;
-  border-radius: 3px;
+/* Move-classification icons (chess.com-style). The icon is rendered
+ * after the SAN. No background pill — the icon is its own visual. */
+.move-cell .move-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
   vertical-align: middle;
-  letter-spacing: 0.5px;
+  line-height: 0;
 }
-.move-cell .tag-book { background: #5b8def; color: white; }
-.move-cell .tag-brilliant { background: #1abc9c; color: white; }
-.move-cell .tag-great { background: #2ecc71; color: white; }
-.move-cell .tag-best { background: #2ecc71; color: white; opacity: 0.8; }
-.move-cell .tag-good { background: transparent; color: var(--text-dim); }
-.move-cell .tag-inaccuracy { background: #f1c40f; color: #333; }
-.move-cell .tag-mistake { background: #e67e22; color: white; }
-.move-cell .tag-blunder { background: #e74c3c; color: white; }
-.move-cell .tag-neutral { background: transparent; color: var(--text-dim); }
+.move-cell .move-icon svg { display: block; }
 
 .promotion-backdrop {
   position: fixed;

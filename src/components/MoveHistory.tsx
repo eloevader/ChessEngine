@@ -1,5 +1,6 @@
 import type { LegalMove } from '../chess/GameState';
 import type { ClassifiedPly, MoveTag } from '../chess/classifier';
+import { TagIcon } from '../chess/moveIcons';
 
 interface MoveHistoryProps {
   history: string[];
@@ -14,19 +15,6 @@ interface MoveHistoryProps {
    *  gets a colored tag dot. */
   classifications?: ClassifiedPly[];
 }
-
-const TAG_GLYPH: Record<MoveTag, string> = {
-  book: '📖',
-  brilliant: '!!',
-  great: '!',
-  best: '★',
-  good: '',
-  neutral: '',
-  inaccuracy: '?!',
-  mistake: '?',
-  blunder: '??',
-  '?': '·',
-};
 
 const TAG_LABEL: Record<MoveTag, string> = {
   book: 'Book',
@@ -135,7 +123,11 @@ export function MoveHistory({
                 }
               >
                 <span className="move-text">{r.white ?? ''}</span>
-                {wTag && <span className={`move-tag tag-${wTag}`}>{TAG_GLYPH[wTag]}</span>}
+                {wTag && (
+                  <span className={`move-icon icon-${wTag}`}>
+                    <TagIcon tag={wTag} size={14} />
+                  </span>
+                )}
               </button>
               <button
                 className={`move-cell ${currentPly === r.blackIndex + 1 ? 'active' : ''} ${currentPly > r.blackIndex + 1 ? 'past' : ''}`}
@@ -144,7 +136,11 @@ export function MoveHistory({
                 title={bTag ? `${r.black} — ${TAG_LABEL[bTag]}` : r.black}
               >
                 <span className="move-text">{r.black ?? ''}</span>
-                {bTag && <span className={`move-tag tag-${bTag}`}>{TAG_GLYPH[bTag]}</span>}
+                {bTag && (
+                  <span className={`move-icon icon-${bTag}`}>
+                    <TagIcon tag={bTag} size={14} />
+                  </span>
+                )}
               </button>
             </div>
           );
