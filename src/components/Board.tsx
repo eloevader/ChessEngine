@@ -702,7 +702,10 @@ function PreMoveArrow({
           markerHeight={4}
           orient="auto-start-reverse"
         >
-          <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(180, 180, 180, 0.9)" />
+          <path
+            d="M 0 0 L 10 5 L 0 10 z"
+            fill="rgba(85, 152, 222, 1)"
+          />
         </marker>
       </defs>
       <line
@@ -710,10 +713,10 @@ function PreMoveArrow({
         y1={y1}
         x2={ex}
         y2={ey}
-        stroke="rgba(180, 180, 180, 0.85)"
-        strokeWidth={cell * 0.14}
+        stroke="rgba(85, 152, 222, 0.95)"
+        strokeWidth={cell * 0.18}
         strokeLinecap="round"
-        strokeDasharray={`${cell * 0.22} ${cell * 0.16}`}
+        strokeDasharray={`${cell * 0.24} ${cell * 0.16}`}
         markerEnd="url(#premove-arrowhead)"
       />
     </svg>

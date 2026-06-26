@@ -368,34 +368,39 @@ function App() {
       // it becomes the human's turn (if still legal).
       if (canPreMove()) {
         const humanColor = engineSide === 'w' ? 'b' : 'w';
-        // If a pre-move is already queued, allow re-selecting from
-        // by clicking the original pre-move's "from" or by clicking
-        // any of the human's own pieces (replaces the pre-move's
-        // starting square).
+        // First click: from-to = same square (just the start)
         if (preMove === null) {
           if (piece && piece.color === humanColor) {
             setPreMove({ from: square, to: square });
           }
           return;
         }
-        // A pre-move is queued. Clicks:
-        //   - on the from square: cancel the pre-move
-        //   - on the to square (after setting from): keep from, drop to
-        //   - on a different own-piece: change the from square
-        //   - on an enemy / own target square: set the to square
+        // Subsequent clicks:
         if (square === preMove.from) {
+          // Click on the same from square → cancel
           setPreMove(null);
           return;
         }
         const fromPiece = game.pieceAt(preMove.from);
-        if (piece && piece.color === humanColor && square !== preMove.to) {
-          // Re-pick a new starting square
+        // Click on another of the human's own pieces (and not the
+        // currently-set `to` square) → change the from square.
+        if (
+          piece &&
+          piece.color === humanColor &&
+          square !== preMove.to
+        ) {
           setPreMove({ from: square, to: square });
           return;
         }
-        // Otherwise it's the destination — set it.
+        // Click on the same `to` square → clear the to (waiting for
+        // a real destination).
+        if (square === preMove.to) {
+          setPreMove({ from: preMove.from, to: preMove.from });
+          return;
+        }
+        // Otherwise: it's the destination (empty square or enemy
+        // piece to capture). Set it.
         if (fromPiece) {
-          // Check for promotion (pawn to back rank).
           const promo =
             fromPiece.type === 'p' && (square[1] === '1' || square[1] === '8')
               ? 'q'
@@ -476,6 +481,13 @@ function App() {
 
   const handlePieceDragStart = useCallback(
     (from: Square, piece: Piece) => {
+      // In computer mode during the engine's turn, dragging starts a
+      // pre-move (the human may be queueing a move for their next
+      // turn). In other cases, dragging starts a real move.
+      if (canPreMove()) {
+        setPreMove({ from, to: from });
+        return;
+      }
       if (!canHumanMove()) return;
       if (piece.color !== game.turn()) return;
       selectSquare(from);
@@ -487,6 +499,24 @@ function App() {
   const handleDropOnSquare = useCallback(
     (to: Square) => {
       if (animatingMove) return;
+      // If a pre-move is in progress (from drag or from a click),
+      // the drop completes the pre-move.
+      if (preMove !== null && preMove.from === preMove.to) {
+        // Started by a drag — set the destination.
+        const fromPiece = game.pieceAt(preMove.from);
+        if (fromPiece) {
+          const promo =
+            fromPiece.type === 'p' && (to[1] === '1' || to[1] === '8')
+              ? 'q'
+              : undefined;
+          setPreMove({ from: preMove.from, to, promotion: promo });
+        }
+        return;
+      }
+      if (preMove !== null) {
+        // A pre-move is fully set already — ignore further drops.
+        return;
+      }
       if (!selected) return;
       if (!legalTargets.has(to) && !captureTargets.has(to)) {
         clearSelection();
@@ -502,7 +532,7 @@ function App() {
       tryMove(selected, to);
       clearSelection();
     },
-    [selected, legalTargets, captureTargets, animatingMove, tryMove],
+    [selected, legalTargets, captureTargets, animatingMove, tryMove, preMove],
   );
 
   const handleDragEnd = useCallback(() => clearSelection(), []);
@@ -1068,6 +1098,17 @@ function App() {
             {moveClassifications.openingName && (
               <span className="lichess-info">
                 {' • '}{moveClassifications.openingName}
+              </span>
+            )}
+            {preMovesEnabled && preMove && preMove.from !== preMove.to && (
+              <span className="lichess-info">
+                {' • pre-move queued: '}
+                {preMove.from}→{preMove.to}
+              </span>
+            )}
+            {preMovesEnabled && preMove && preMove.from === preMove.to && (
+              <span className="lichess-info">
+                {' • click a destination for your pre-move'}
               </span>
             )}
             {settings.gameMode === 'computer' && engine.status === 'thinking' && ' • thinking…'}
