@@ -22,8 +22,11 @@ interface BoardProps {
   /** Right-click-on-square highlights (single square, no drag). */
   squareHighlights: Map<Square, ArrowColor>;
   arrowColor: ArrowColor;
-  /** Pre-move indicator (from + to, dashed). */
-  preMove?: { from: Square; to: Square } | null;
+  /** Pre-move indicators. Each entry is one queued pre-move.
+   *  `from` is the starting square, `to` the destination. The
+   *  optional `pending` flag marks the from square the user just
+   *  clicked but hasn't yet chosen a destination for. */
+  preMoveHighlights?: Array<{ from: Square; to: Square; pending?: boolean }> | null;
   /** Optional annotation for the move that landed on a given square.
    *  Map keyed by destination square (e.g. "e4"). */
   moveTagsByTo?: Map<Square, { tag: string; label: string }>;
@@ -70,7 +73,7 @@ export function Board(props: BoardProps) {
     arrows,
     squareHighlights,
     arrowColor,
-    preMove,
+    preMoveHighlights,
     moveTagsByTo,
     onArrowDraw,
     onArrowEraseAt,
@@ -406,8 +409,16 @@ export function Board(props: BoardProps) {
               isLastMoveFrom={lastMove?.from === square}
               isLastMoveTo={lastMove?.to === square}
               isCheck={kingInCheck === square}
-              isPreMoveFrom={preMove?.from === square}
-              isPreMoveTo={preMove?.to === square}
+              isPreMoveFrom={
+                preMoveHighlights?.some(
+                  (p) => (p.from === square || p.pending === true) && p.from === square,
+                ) ?? false
+              }
+              isPreMoveTo={
+                preMoveHighlights?.some(
+                  (p) => p.from !== p.to && p.to === square,
+                ) ?? false
+              }
               moveLabel={
                 settings.moveNotationOnBoard
                   ? lastMove?.from === square
@@ -449,7 +460,12 @@ export function Board(props: BoardProps) {
                 : null
             }
           />
-          {preMove && <PreMoveArrow preMove={preMove} orientation={orientation} />}
+          {preMoveHighlights && preMoveHighlights.length > 0 && (
+            <PreMoveArrow
+              highlights={preMoveHighlights}
+              orientation={orientation}
+            />
+          )}
           {touchDrag && (
             <div
               className="touch-ghost"
@@ -636,90 +652,15 @@ function SquareHighlights({ highlights, orientation }: SquareHighlightsProps) {
   );
 }
 
-/** Renders the dashed pre-move arrow (and highlights on its from/to
- *  squares already come from BoardSquare's isPreMoveFrom / isPreMoveTo
- *  props). */
-function PreMoveArrow({
-  preMove,
-  orientation,
-}: {
-  preMove: { from: Square; to: Square };
+/** Renders the pre-move indicators. The from/to squares already
+ *  get their colored cell highlights from BoardSquare's
+ *  isPreMoveFrom / isPreMoveTo props. We previously drew a dashed
+ *  arrow here, but the user wants NO arrow — just the cell tints.
+ *  This component is kept as a no-op so the call site is unchanged. */
+function PreMoveArrow(_: {
+  highlights: Array<{ from: Square; to: Square; pending?: boolean }>;
   orientation: 'w' | 'b';
 }) {
-  const [size, setSize] = useState(0);
-  const [board, setBoard] = useState<HTMLElement | null>(null);
-  useEffect(() => {
-    const el = document.querySelector('.board') as HTMLElement | null;
-    if (!el) return;
-    setBoard(el);
-    const update = () => setSize(el.getBoundingClientRect().width);
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-  if (!board || size === 0) return null;
-  const cell = size / 8;
-  const f1 = preMove.from.charCodeAt(0) - 97;
-  const r1 = parseInt(preMove.from[1], 10) - 1;
-  const f2 = preMove.to.charCodeAt(0) - 97;
-  const r2 = parseInt(preMove.to[1], 10) - 1;
-  const fVis1 = orientation === 'w' ? f1 : 7 - f1;
-  const rVis1 = orientation === 'w' ? 7 - r1 : r1;
-  const fVis2 = orientation === 'w' ? f2 : 7 - f2;
-  const rVis2 = orientation === 'w' ? 7 - r2 : r2;
-  const x1 = (fVis1 + 0.5) * cell;
-  const y1 = (rVis1 + 0.5) * cell;
-  const x2 = (fVis2 + 0.5) * cell;
-  const y2 = (rVis2 + 0.5) * cell;
-  // Shorten the head
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const len = Math.hypot(dx, dy) || 1;
-  const headInset = cell * 0.22;
-  const ex = x2 - (dx / len) * headInset;
-  const ey = y2 - (dy / len) * headInset;
-  return (
-    <svg
-      style={{
-        position: 'absolute',
-        left: 0,
-        top: 0,
-        width: '100%',
-        height: '100%',
-        pointerEvents: 'none',
-        zIndex: 4,
-        overflow: 'visible',
-      }}
-    >
-      <defs>
-        <marker
-          id="premove-arrowhead"
-          viewBox="0 0 10 10"
-          refX="5"
-          refY="5"
-          markerWidth={4}
-          markerHeight={4}
-          orient="auto-start-reverse"
-        >
-          <path
-            d="M 0 0 L 10 5 L 0 10 z"
-            fill="rgba(85, 152, 222, 1)"
-          />
-        </marker>
-      </defs>
-      <line
-        x1={x1}
-        y1={y1}
-        x2={ex}
-        y2={ey}
-        stroke="rgba(85, 152, 222, 0.95)"
-        strokeWidth={cell * 0.18}
-        strokeLinecap="round"
-        strokeDasharray={`${cell * 0.24} ${cell * 0.16}`}
-        markerEnd="url(#premove-arrowhead)"
-      />
-    </svg>
-  );
+  return null;
 }
 

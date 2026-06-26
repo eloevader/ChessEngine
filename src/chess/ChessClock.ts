@@ -21,6 +21,10 @@ export interface ChessClock {
   switchTo: (side: 'w' | 'b' | null) => void;
   /** Add the increment to the side that just moved. */
   addIncrement: (side: 'w' | 'b') => void;
+  /** Subtract a flat amount of time (in seconds) from a side.
+   *  Used for pre-move penalties (chess.com-style: 0.1s per
+   *  pre-move). Clamped at 0 — never goes negative. */
+  subtractSeconds: (side: 'w' | 'b', seconds: number) => void;
 }
 
 export function useChessClock(initial?: ClockConfig): ChessClock {
@@ -48,6 +52,14 @@ export function useChessClock(initial?: ClockConfig): ChessClock {
       setWhite((s) => s + initialRef.current!.incrementSeconds);
     } else {
       setBlack((s) => s + initialRef.current!.incrementSeconds);
+    }
+  };
+
+  const subtractSeconds = (side: 'w' | 'b', seconds: number) => {
+    if (side === 'w') {
+      setWhite((s) => Math.max(0, s - seconds));
+    } else {
+      setBlack((s) => Math.max(0, s - seconds));
     }
   };
 
@@ -86,6 +98,7 @@ export function useChessClock(initial?: ClockConfig): ChessClock {
     reset,
     switchTo,
     addIncrement,
+    subtractSeconds,
   };
 }
 

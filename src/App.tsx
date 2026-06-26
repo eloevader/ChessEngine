@@ -162,14 +162,24 @@ function App() {
   const [lichessOpen, setLichessOpen] = useState(false);
   /** Last imported Lichess game's headers (for display). */
   const [lichessHeaders, setLichessHeaders] = useState<Record<string, string> | null>(null);
-  /** Pre-move queued during the engine's turn (vs-computer mode only).
-   *  Played automatically as soon as it becomes the human's turn, if
-   *  still legal. */
-  const [preMove, setPreMove] = useState<{
-    from: Square;
-    to: Square;
-    promotion?: 'q' | 'r' | 'b' | 'n';
-  } | null>(null);
+  /** Queue of pre-moves (vs-computer mode only). Each move is played
+   *  in order as soon as it becomes the human's turn. The user can
+   *  queue several moves ahead during the engine's thinking time —
+   *  like chess.com / Lichess, each pre-move costs 0.1s off the
+   *  human's clock (only when a clock is enabled). */
+  const [preMoveQueue, setPreMoveQueue] = useState<
+    Array<{ from: Square; to: Square; promotion?: 'q' | 'r' | 'b' | 'n' }>
+  >([]);
+  /** The pre-move the user is currently composing (incomplete —
+   *  from and to are the same square, waiting for a destination). */
+  const [pendingPreMoveFrom, setPendingPreMoveFrom] = useState<Square | null>(
+    null,
+  );
+  const preMove = preMoveQueue[0] ?? null;
+  const preMovesEnabled = settings.gameMode === 'computer';
+  // Number of pre-moves that have already been queued (excluding the
+  // pending one being composed). We display this in the status bar.
+  const queuedCount = preMoveQueue.length;
 
   // -------- Derived state --------
   const snapshot = game.snapshot();
@@ -344,9 +354,6 @@ function App() {
     );
   };
 
-  /** True if pre-moves are allowed at all in the current mode. */
-  const preMovesEnabled = settings.gameMode === 'computer';
-
   const handleSquareClick = useCallback(
     (square: Square) => {
       const piece = game.pieceAt(square);
@@ -365,47 +372,49 @@ function App() {
       // Pre-move handling: when the engine is thinking and the human
       // clicks a from→to pair of their own pieces, queue a pre-move
       // instead of executing it. The pre-move will fire as soon as
-      // it becomes the human's turn (if still legal).
+      // it becomes the human's turn (if still legal). The user may
+      // queue multiple pre-moves in sequence.
       if (canPreMove()) {
         const humanColor = engineSide === 'w' ? 'b' : 'w';
-        // First click: from-to = same square (just the start)
-        if (preMove === null) {
+        // No pending from-piece: this is the first click of a new
+        // pre-move. We just record the from square.
+        if (pendingPreMoveFrom === null) {
           if (piece && piece.color === humanColor) {
-            setPreMove({ from: square, to: square });
+            setPendingPreMoveFrom(square);
           }
           return;
         }
-        // Subsequent clicks:
-        if (square === preMove.from) {
-          // Click on the same from square → cancel
-          setPreMove(null);
+        // There IS a pending from-piece. Clicks:
+        if (square === pendingPreMoveFrom) {
+          // Same square as the from-piece → cancel that from-piece.
+          setPendingPreMoveFrom(null);
           return;
         }
-        const fromPiece = game.pieceAt(preMove.from);
-        // Click on another of the human's own pieces (and not the
-        // currently-set `to` square) → change the from square.
-        if (
-          piece &&
-          piece.color === humanColor &&
-          square !== preMove.to
-        ) {
-          setPreMove({ from: square, to: square });
+        const fromPiece = game.pieceAt(pendingPreMoveFrom);
+        // Click on another of the human's own pieces (different from
+        // the pending from) → change the from.
+        if (piece && piece.color === humanColor) {
+          setPendingPreMoveFrom(square);
           return;
         }
-        // Click on the same `to` square → clear the to (waiting for
-        // a real destination).
-        if (square === preMove.to) {
-          setPreMove({ from: preMove.from, to: preMove.from });
-          return;
-        }
-        // Otherwise: it's the destination (empty square or enemy
-        // piece to capture). Set it.
+        // Otherwise: it's the destination. Append to the queue.
         if (fromPiece) {
           const promo =
             fromPiece.type === 'p' && (square[1] === '1' || square[1] === '8')
               ? 'q'
               : undefined;
-          setPreMove({ from: preMove.from, to: square, promotion: promo });
+          setPreMoveQueue((q) => [
+            ...q,
+            { from: pendingPreMoveFrom, to: square, promotion: promo },
+          ]);
+          // Charge 0.1s penalty per pre-move (only if the clock is
+          // running — no penalty in unrated analysis).
+          if (clockEnabled) {
+            clock.subtractSeconds(humanColor, 0.1);
+          }
+          // Reset the pending from so the user can queue another
+          // pre-move on the next click.
+          setPendingPreMoveFrom(null);
         }
         return;
       }
@@ -485,7 +494,7 @@ function App() {
       // pre-move (the human may be queueing a move for their next
       // turn). In other cases, dragging starts a real move.
       if (canPreMove()) {
-        setPreMove({ from, to: from });
+        setPendingPreMoveFrom(from);
         return;
       }
       if (!canHumanMove()) return;
@@ -499,22 +508,31 @@ function App() {
   const handleDropOnSquare = useCallback(
     (to: Square) => {
       if (animatingMove) return;
-      // If a pre-move is in progress (from drag or from a click),
-      // the drop completes the pre-move.
-      if (preMove !== null && preMove.from === preMove.to) {
-        // Started by a drag — set the destination.
-        const fromPiece = game.pieceAt(preMove.from);
+      // If the user just started a pre-move via drag, the drop
+      // completes it.
+      if (pendingPreMoveFrom !== null) {
+        const fromPiece = game.pieceAt(pendingPreMoveFrom);
         if (fromPiece) {
           const promo =
             fromPiece.type === 'p' && (to[1] === '1' || to[1] === '8')
               ? 'q'
               : undefined;
-          setPreMove({ from: preMove.from, to, promotion: promo });
+          setPreMoveQueue((q) => [
+            ...q,
+            { from: pendingPreMoveFrom, to, promotion: promo },
+          ]);
+          const humanColor: 'w' | 'b' =
+            engineSide === 'w' ? 'b' : 'w';
+          if (clockEnabled) {
+            clock.subtractSeconds(humanColor, 0.1);
+          }
         }
+        setPendingPreMoveFrom(null);
         return;
       }
-      if (preMove !== null) {
-        // A pre-move is fully set already — ignore further drops.
+      if (preMoveQueue.length > 0) {
+        // Already have queued pre-moves — ignore further drops
+        // until the engine's move resolves.
         return;
       }
       if (!selected) return;
@@ -532,7 +550,7 @@ function App() {
       tryMove(selected, to);
       clearSelection();
     },
-    [selected, legalTargets, captureTargets, animatingMove, tryMove, preMove],
+    [selected, legalTargets, captureTargets, animatingMove, tryMove, pendingPreMoveFrom, preMoveQueue.length, clock, clockEnabled, engineSide],
   );
 
   const handleDragEnd = useCallback(() => clearSelection(), []);
@@ -568,7 +586,8 @@ function App() {
     setReviewing(false);
     setArrows([]);
     setSquareHighlights(new Map());
-    setPreMove(null);
+    setPreMoveQueue([]);
+    setPendingPreMoveFrom(null);
   };
 
   // -------- Arrow drawing (right-click drag, chess.com style) --------
@@ -722,7 +741,8 @@ function App() {
     setReviewing(false);
     setArrows([]);
     setSquareHighlights(new Map());
-    setPreMove(null);
+    setPreMoveQueue([]);
+    setPendingPreMoveFrom(null);
     setEngineSide(null);
     setClockEnabled(false);
     clock.reset({ initialSeconds: 0, incrementSeconds: 0 });
@@ -772,7 +792,8 @@ function App() {
     setFen(game.fen());
     setViewPly(newHistory.length);
     setLastMove(null);
-    setPreMove(null);
+    setPreMoveQueue([]);
+    setPendingPreMoveFrom(null);
     engine.clearBestMove();
     engine.stop();
   };
@@ -837,7 +858,8 @@ function App() {
     if (isGameEnded) {
       void engineStop();
       clock.switchTo(null);
-      setPreMove(null);
+      setPreMoveQueue([]);
+      setPendingPreMoveFrom(null);
     }
   }, [isGameEnded, clock, engineStop]);
 
@@ -931,37 +953,41 @@ function App() {
     }
   }, [fen, isEngineThinking, engineRequestEval, engineStop, settings.engineLevel]);
 
-  // Pre-move: when it's the human's turn in computer mode and a
-  // pre-move is queued, play it if it's still legal. Otherwise drop
-  // it silently.
+  // Pre-move: when it's the human's turn in computer mode and at
+  // least one pre-move is queued, play the next one if it's still
+  // legal. Otherwise drop it silently. We play moves one at a time;
+  // each successful play updates the fen, which re-triggers this
+  // effect to handle the next item in the queue.
   useEffect(() => {
-    if (!preMove) return;
+    if (preMoveQueue.length === 0) return;
     if (settings.gameMode !== 'computer') return;
     if (engineSide === null) return;
     if (snapshot.turn === engineSide) return; // still engine's turn
     if (isGameEnded || gameEndReason) {
-      setPreMove(null);
+      setPreMoveQueue([]);
+      setPendingPreMoveFrom(null);
       return;
     }
     if (animatingMove) return; // wait for the engine's move to finish animating
-    // Check legality in the current position.
-    const legal = game.legalMovesFrom(preMove.from);
+    const next = preMoveQueue[0];
+    if (!next) return;
+    const legal = game.legalMovesFrom(next.from);
     const stillLegal = legal.some(
       (m) =>
-        m.to === preMove.to &&
-        (m.promotion ?? undefined) === preMove.promotion,
+        m.to === next.to &&
+        (m.promotion ?? undefined) === next.promotion,
     );
     if (stillLegal) {
-      const from = preMove.from;
-      const to = preMove.to;
-      const promo = preMove.promotion;
-      setPreMove(null);
-      tryMove(from, to, promo);
+      setPreMoveQueue((q) => q.slice(1));
+      tryMove(next.from, next.to, next.promotion);
     } else {
-      setPreMove(null);
+      // The queued move isn't legal (e.g. the engine took our piece).
+      // Drop the entire queue silently.
+      setPreMoveQueue([]);
+      setPendingPreMoveFrom(null);
     }
   }, [
-    preMove,
+    preMoveQueue,
     settings.gameMode,
     engineSide,
     snapshot.turn,
@@ -1100,15 +1126,17 @@ function App() {
                 {' • '}{moveClassifications.openingName}
               </span>
             )}
-            {preMovesEnabled && preMove && preMove.from !== preMove.to && (
+            {preMovesEnabled && queuedCount > 0 && (
               <span className="lichess-info">
-                {' • pre-move queued: '}
-                {preMove.from}→{preMove.to}
+                {' • pre-move'}{queuedCount > 1 ? 's' : ''} queued
+                {queuedCount > 1 ? ` (${queuedCount})` : ''}: {preMoveQueue.map((m) => `${m.from}→${m.to}`).join(', ')}
+                {pendingPreMoveFrom && ` (+ ${pendingPreMoveFrom}→?)`}
               </span>
             )}
-            {preMovesEnabled && preMove && preMove.from === preMove.to && (
+            {preMovesEnabled && queuedCount === 0 && pendingPreMoveFrom && (
               <span className="lichess-info">
-                {' • click a destination for your pre-move'}
+                {' • click a destination for your pre-move (from '}
+                {pendingPreMoveFrom}{')'}
               </span>
             )}
             {settings.gameMode === 'computer' && engine.status === 'thinking' && ' • thinking…'}
@@ -1167,7 +1195,16 @@ function App() {
               arrows={allArrows}
               squareHighlights={squareHighlights}
               arrowColor={arrowColor}
-              preMove={preMovesEnabled ? preMove : null}
+              preMoveHighlights={
+                preMovesEnabled
+                  ? [
+                      ...preMoveQueue.map((m) => ({ from: m.from, to: m.to })),
+                      ...(pendingPreMoveFrom
+                        ? [{ from: pendingPreMoveFrom, to: pendingPreMoveFrom, pending: true }]
+                        : []),
+                    ]
+                  : null
+              }
               moveTagsByTo={moveTagsByTo}
               onArrowDraw={onArrowDraw}
               onArrowEraseAt={onArrowEraseAt}
