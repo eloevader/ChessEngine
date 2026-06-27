@@ -1538,11 +1538,14 @@ function App() {
                   </div>
                 )}
 
-                {sidebarTab === 'analysis' && (
+                  {sidebarTab === 'analysis' && (
                   <div className="cc-sidebar-section cc-analysis">
                     <div className="cc-engine-status">
-                      {engine.status === 'ready' ? `Engine ready · depth ${engine.bestLine?.depth ?? '—'}` : engine.status === 'thinking' ? 'Engine thinking…' : engine.status === 'error' ? 'Engine offline' : 'Engine idle'}
+                      {engine.status === 'ready' ? `Engine ready · depth ${engine.bestLine?.depth ?? '—'}` : engine.status === 'thinking' ? 'Engine thinking…' : engine.status === 'error' ? (settings.engineMode === 'wasm' ? 'WASM engine unavailable' : 'Engine offline') : 'Engine idle'}
                     </div>
+                    {engine.status === 'error' && engine.error && (
+                      <div className="cc-engine-error">{engine.error}</div>
+                    )}
                     {engine.bestLine && engine.bestLine.pv.length > 0 && (
                       <div className="cc-engine-line">
                         <div className="cc-engine-line-label">Best line</div>
@@ -1631,7 +1634,13 @@ function App() {
                 )}
 
                 {moveClassifications.bulkLoading && <div className="cc-premove-banner">Analyzing moves {moveClassifications.evaluatedPlies}/{moveClassifications.totalPlies}…</div>}
-                {settings.gameMode === 'computer' && engine.status === 'loading' && <div className="cc-premove-banner cc-status-error">Engine offline — run: node scripts/stockfish-bridge.js</div>}
+                {(engine.status === 'error' || (settings.gameMode === 'computer' && engine.status === 'loading')) && (
+                  <div className="cc-premove-banner cc-status-error">
+                    {engine.error ?? (settings.engineMode === 'wasm'
+                      ? 'WASM engine requires COOP/COEP headers — switch to Local bridge in Settings'
+                      : 'Engine offline — run: node scripts/stockfish-bridge.js')}
+                  </div>
+                )}
               </div>
             )}
           </aside>

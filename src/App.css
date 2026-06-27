@@ -484,12 +484,18 @@ body {
 /* Analysis tab */
 .cc-analysis { padding: 16px; }
 .cc-engine-status {
-  color: var(--cc-text-muted);
+  color: var(--cc-text-dim);
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+.cc-engine-error {
+  color: var(--cc-red, #c33);
   font-size: 12px;
-  font-weight: 500;
-  margin-bottom: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--cc-border-subtle);
+  line-height: 1.5;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  background: rgba(204, 51, 51, 0.1);
+  border-radius: 4px;
 }
 .cc-engine-line { display: flex; flex-direction: column; gap: 4px; }
 .cc-engine-line-label {
