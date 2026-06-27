@@ -28,6 +28,10 @@ export interface Settings {
   showSettingsOnStart: boolean;
   gameMode: GameMode;
   engineLevel: EngineLevel;
+  /** How long the computer is allowed to think per move. The named
+   *  presets correspond to actual movetime budgets in the engine
+   *  wrapper. Default = "normal". */
+  thinkTime: 'instant' | 'fast' | 'normal' | 'slow' | 'maximum';
   playerSide: PlayerSide;
   evalBarEnabled: boolean;
   evalBarPosition: EvalBarPosition;
@@ -78,6 +82,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showSettingsOnStart: false,
   gameMode: 'analysis',
   engineLevel: 4,
+  thinkTime: 'normal',
   playerSide: 'w',
   evalBarEnabled: true,
   evalBarPosition: 'left',

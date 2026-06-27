@@ -481,6 +481,33 @@ body { overflow: hidden; }
 .ng-level-btn:hover { background: #3a3d4a; }
 .ng-level-btn.selected { background: var(--accent-strong); color: white; border-color: var(--accent-strong); }
 
+.ng-thinktime-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  width: 100%;
+}
+.ng-thinktime-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 6px 4px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-clr);
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  min-width: 0;
+}
+.ng-thinktime-btn:hover { background: #3a3d4a; }
+.ng-thinktime-btn.selected { background: var(--accent-strong); color: white; border-color: var(--accent-strong); }
+.ng-thinktime-label { font-size: 12px; font-weight: 600; }
+.ng-thinktime-hint { font-size: 9px; color: var(--text-dim); }
+.ng-thinktime-btn.selected .ng-thinktime-hint { color: rgba(255, 255, 255, 0.85); }
+
 .ng-preset-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StockfishEngine, type EngineLine } from './StockfishEngine';
+import { StockfishEngine, THINK_TIME_MS, type EngineLine } from './StockfishEngine';
 
 export type EngineStatus = 'idle' | 'loading' | 'ready' | 'thinking' | 'error';
 
@@ -11,7 +11,11 @@ export interface UseEngineReturn {
   scoreCp: number | null;
   scoreMate: number | null;
   bestMove: string | null;
-  requestEval: (fen: string, level: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8) => void;
+  requestEval: (
+    fen: string,
+    level: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8,
+    thinkTime?: 'instant' | 'fast' | 'normal' | 'slow' | 'maximum',
+  ) => void;
   /** One-shot evaluation of an arbitrary FEN. When `multiPv` is
    *  greater than 1, the returned `lines` contains the top N
    *  principal variations from Stockfish. */
@@ -92,6 +96,7 @@ export function useEngine(): UseEngineReturn {
     async (
       fen: string,
       level: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8,
+      thinkTime: 'instant' | 'fast' | 'normal' | 'slow' | 'maximum' | undefined,
       multiPv: number = 1,
     ) => {
       const e = engineRef.current;
@@ -99,7 +104,13 @@ export function useEngine(): UseEngineReturn {
       try {
         await e.setPosition(fen);
         setStatus('thinking');
-        await e.go({ level, multiPv });
+        const movetimeOverride =
+          thinkTime != null ? THINK_TIME_MS[thinkTime] : undefined;
+        await e.go({
+          level,
+          multiPv,
+          ...(movetimeOverride != null ? { movetimeOverride } : {}),
+        });
       } catch {
         // ignored; the engine emits its own error events
       }
@@ -108,10 +119,15 @@ export function useEngine(): UseEngineReturn {
   );
 
   const requestEval = useCallback(
-    (fen: string, level: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8) => {
+    (
+      fen: string,
+      level: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8,
+      thinkTime?: 'instant' | 'fast' | 'normal' | 'slow' | 'maximum',
+      multiPv: number = 1,
+    ) => {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
       debounceRef.current = window.setTimeout(() => {
-        void startEngineEval(fen, level);
+        void startEngineEval(fen, level, thinkTime, multiPv);
       }, 150) as unknown as number;
     },
     [startEngineEval],

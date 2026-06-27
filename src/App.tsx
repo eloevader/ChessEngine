@@ -775,6 +775,11 @@ function App() {
     [],
   );
 
+  const onClearPreMoves = useCallback(() => {
+    setPreMoveQueue([]);
+    setPendingPreMoveFrom(null);
+  }, []);
+
   const onClearArrows = useCallback(() => {
     setArrows([]);
     setSquareHighlights(new Map());
@@ -1117,7 +1122,7 @@ function App() {
 
   useEffect(() => {
     if (isEngineThinking) {
-      engineRequestEval(fen, settings.engineLevel);
+      engineRequestEval(fen, settings.engineLevel, settings.thinkTime);
     } else {
       void engineStop();
     }
@@ -1312,11 +1317,12 @@ function App() {
                 {queuedCount > 1 ? ` (${queuedCount})` : ''}:{' '}
                 {preMoveQueue.map((m) => `${m.from}→${m.to}`).join(', ')}
                 {pendingPreMoveFrom && ` (+ ${pendingPreMoveFrom}→?)`}
+                {' · right-click board to clear'}
               </span>
             )}
             {preMovesEnabled && queuedCount === 0 && pendingPreMoveFrom && (
               <span className="meta-info">
-                pre-move from {pendingPreMoveFrom} — pick a destination
+                pre-move from {pendingPreMoveFrom} — pick a destination (right-click to clear)
               </span>
             )}
             {settings.gameMode === 'computer' &&
@@ -1393,6 +1399,8 @@ function App() {
               onArrowDraw={onArrowDraw}
               onArrowEraseAt={onArrowEraseAt}
               onSquareRightClick={onSquareRightClick}
+              onClearPreMoves={onClearPreMoves}
+              hasPreMoves={preMoveQueue.length > 0 || pendingPreMoveFrom !== null}
               onSquareClick={handleSquareClick}
               onPieceDragStart={handlePieceDragStart}
               onDragOverSquare={() => {}}

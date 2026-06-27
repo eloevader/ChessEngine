@@ -20,6 +20,9 @@ export interface EngineOptions {
   multiPv?: number;
   threads?: number;
   hash?: number;
+  /** Optional override for the movetime budget. If provided, the
+   *  per-level `movetime` is ignored. */
+  movetimeOverride?: number;
 }
 
 export type EngineListener = (msg: EngineMessage) => void;
@@ -50,6 +53,20 @@ export const LEVEL_CONFIG: Record<
   6: { skill: 18, movetime: 4000 },
   7: { skill: 20, movetime: 5000 },
   8: { skill: 20, movetime: 7000, depth: 22 },
+};
+
+/** Movetime budgets (in ms) for the named "think time" presets.
+ *  These override the per-level movetime when the user picks a
+ *  preset. */
+export const THINK_TIME_MS: Record<
+  'instant' | 'fast' | 'normal' | 'slow' | 'maximum',
+  number
+> = {
+  instant: 200,    // ~instant
+  fast: 800,       // quick
+  normal: 2500,    // balanced
+  slow: 6000,      // think more
+  maximum: 30000,  // up to 30s / move
 };
 
 const DEFAULT_URL = 'ws://localhost:8765';
@@ -215,10 +232,11 @@ export class StockfishEngine {
     await this.init();
     this.setLevel(options.level);
     const cfg = LEVEL_CONFIG[options.level];
+    const movetime = options.movetimeOverride ?? cfg.movetime;
     const parts: string[] = ['go'];
     if (options.multiPv && options.multiPv > 1) parts.push(`multipv ${options.multiPv}`);
-    parts.push(`movetime ${cfg.movetime}`);
-    if (cfg.depth) parts.push(`depth ${cfg.depth}`);
+    parts.push(`movetime ${movetime}`);
+    if (!options.movetimeOverride && cfg.depth) parts.push(`depth ${cfg.depth}`);
     this.sendRaw(parts.join(' '));
   }
 

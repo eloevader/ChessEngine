@@ -26,6 +26,17 @@ const PLAYER_SIDES: { id: PlayerSide; label: string }[] = [
   { id: 'b', label: 'Black' },
   { id: 'random', label: 'Random' },
 ];
+const THINK_TIMES: {
+  id: 'instant' | 'fast' | 'normal' | 'slow' | 'maximum';
+  label: string;
+  hint: string;
+}[] = [
+  { id: 'instant', label: 'Instant', hint: '~0.2s' },
+  { id: 'fast', label: 'Fast', hint: '~0.8s' },
+  { id: 'normal', label: 'Normal', hint: '~2.5s' },
+  { id: 'slow', label: 'Slow', hint: '~6s' },
+  { id: 'maximum', label: 'Maximum', hint: '~30s' },
+];
 
 export function NewGameDialog({ open, onStart, onCancel }: NewGameDialogProps) {
   const { draft, updateDraft, save } = useSettingsDraft();
@@ -134,6 +145,22 @@ export function NewGameDialog({ open, onStart, onCancel }: NewGameDialogProps) {
                       onClick={() => updateDraft({ playerSide: s.id })}
                     >
                       {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="ng-row">
+                <label>Computer think time</label>
+                <div className="ng-thinktime-row">
+                  {THINK_TIMES.map((t) => (
+                    <button
+                      key={t.id}
+                      className={`ng-thinktime-btn ${draft.thinkTime === t.id ? 'selected' : ''}`}
+                      onClick={() => updateDraft({ thinkTime: t.id })}
+                      title={`${t.label} — ${t.hint} per move`}
+                    >
+                      <span className="ng-thinktime-label">{t.label}</span>
+                      <span className="ng-thinktime-hint">{t.hint}</span>
                     </button>
                   ))}
                 </div>

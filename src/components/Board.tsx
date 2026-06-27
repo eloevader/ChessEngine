@@ -34,6 +34,13 @@ interface BoardProps {
   onArrowDraw: (from: Square, to: Square, color: ArrowColor) => void;
   onArrowEraseAt: (square: Square) => void;
   onSquareRightClick: (square: Square, color: ArrowColor) => void;
+  /** Called when the user wants to clear their pre-move queue (e.g.
+   *  by right-clicking on the board while pre-moves are queued). */
+  onClearPreMoves?: () => void;
+  /** Whether the user currently has pre-moves queued. When true, a
+   *  right-click anywhere on the board discards the queue (and
+   *  does NOT draw an arrow). */
+  hasPreMoves?: boolean;
   onSquareClick: (square: Square) => void;
   onPieceDragStart: (square: Square, piece: Piece) => void;
   onDragOverSquare: (square: Square) => void;
@@ -76,6 +83,8 @@ export function Board(props: BoardProps) {
     arrowColor,
     preMoveHighlights,
     moveTagsByTo,
+    hasPreMoves,
+    onClearPreMoves,
     onArrowDraw,
     onArrowEraseAt,
     onSquareRightClick,
@@ -163,6 +172,12 @@ export function Board(props: BoardProps) {
       if (e.button !== 2) return;
       e.preventDefault();
       e.stopPropagation();
+      // If the user has pre-moves queued, any right-click discards
+      // them. Skip arrow drawing for this click.
+      if (hasPreMoves && onClearPreMoves) {
+        onClearPreMoves();
+        return;
+      }
       const startX = e.clientX;
       const startY = e.clientY;
       const fromSq = square;
@@ -218,7 +233,7 @@ export function Board(props: BoardProps) {
       document.addEventListener('mouseup', onUp);
       document.addEventListener('contextmenu', onContext);
     },
-    [squareAtClientPoint],
+    [squareAtClientPoint, hasPreMoves, onClearPreMoves],
   );
 
   // -------- Touch drag (mobile) --------
