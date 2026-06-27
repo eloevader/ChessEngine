@@ -1528,12 +1528,6 @@ function App() {
 
                 {sidebarTab === 'moves' && (
                   <div className="cc-sidebar-section cc-move-list">
-                    <div className="cc-moves-nav">
-                      <button className="cc-nav-btn" onClick={onJumpStart} disabled={viewPly <= 0} aria-label="Jump to start" title="Jump to start">⏮</button>
-                      <button className="cc-nav-btn" onClick={onJumpBack} disabled={viewPly <= 0} aria-label="Step back" title="Step back (←)">◀</button>
-                      <button className="cc-nav-btn" onClick={onJumpForward} disabled={viewPly >= fullHistory.length} aria-label="Step forward" title="Step forward (→)">▶</button>
-                      <button className="cc-nav-btn" onClick={onJumpEnd} disabled={viewPly >= fullHistory.length} aria-label="Jump to end" title="Jump to end">⏭</button>
-                    </div>
                     <MoveHistory history={fullHistory} sanMoves={moveHistorySANS} currentPly={viewPly} onJumpTo={onJumpTo} onJumpStart={onJumpStart} onJumpBack={onJumpBack} onJumpForward={onJumpForward} onJumpEnd={onJumpEnd} classifications={moveClassifications.classifications} moveTimes={moveTimes} bulkProgress={moveClassifications.bulkLoading ? { done: moveClassifications.evaluatedPlies, total: moveClassifications.totalPlies } : null} />
                   </div>
                 )}

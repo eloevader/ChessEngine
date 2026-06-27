@@ -458,13 +458,6 @@ body {
 
 /* Move list nav buttons (chess.com has these as small icons
    above the move list). */
-.cc-moves-nav {
-  display: flex;
-  gap: 4px;
-  justify-content: center;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--cc-border-subtle);
-}
 .cc-nav-btn {
   background: var(--cc-bg-elev-2);
   border: 1px solid var(--cc-border-subtle);
