@@ -79,26 +79,29 @@
 
 html, body, #root {
   height: 100%;
+  width: 100%;
   margin: 0;
   padding: 0;
+  overflow: hidden;
 }
 body {
   background: var(--cc-bg-page);
   color: var(--cc-text);
   font-family: inherit;
-  overflow: hidden; /* chess.com never scrolls the page on desktop */
 }
 
 /* ============================================================
    Root layout
    ============================================================ */
 .app {
-  height: 100vh;
-  width: 100vw;
+  height: 100dvh;
+  width: 100dvw;
   display: grid;
   grid-template-rows: 56px 1fr; /* topbar + main */
   background: var(--cc-bg-page);
   overflow: hidden;
+  position: fixed;
+  inset: 0;
 }
 
 .app.review-mode { /* nothing global, but the class is preserved */ }
@@ -107,7 +110,8 @@ body {
    The topbar stays so the user can exit. */
 .app.board-fullscreen .cc-sidebar { display: none; }
 .app.board-fullscreen .cc-board-area { grid-template-columns: 1fr; }
-.app.board-fullscreen .cc-board-frame { padding: 24px; }
+.app.board-fullscreen .cc-board-column { padding: 4px; gap: 2px; }
+.app.board-fullscreen .cc-player-strip { min-height: 32px; }
 .app.board-fullscreen .cc-player-strip { max-width: min(85vh, 720px); margin: 0 auto; width: 100%; }
 
 /* ============================================================
@@ -223,17 +227,18 @@ body {
 }
 
 /* ============================================================
-   Board column
+   Board column — always constrained to viewport
    ============================================================ */
 .cc-board-column {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 16px;
-  gap: 8px;
+  justify-content: flex-start;
+  padding: 8px;
+  gap: 4px;
   min-width: 0;
   min-height: 0;
+  height: 100%;
   background: var(--cc-bg-page);
   overflow: hidden;
   position: relative;
@@ -246,11 +251,12 @@ body {
 .cc-player-strip {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   width: 100%;
-  max-width: min(85vh, 720px);
-  padding: 4px 8px;
-  min-height: 48px;
+  max-width: min(100%, calc(100dvh - 56px - 140px));
+  padding: 2px 4px;
+  min-height: 40px;
+  flex-shrink: 0;
   box-sizing: border-box;
 }
 .cc-player-strip.top { flex-direction: row-reverse; }
@@ -280,29 +286,39 @@ body {
 .cc-player-rating { color: var(--cc-text-muted); font-weight: 500; }
 
 /* Board frame: the dark slate surround that chess.com uses to
-   visually separate the board from the page. */
+   visually separate the board from the page. Always constrained
+   to the viewport so the board never overflows — even with
+   DevTools open or browser zoom. */
 .cc-board-frame {
   background: var(--cc-board-bg);
   border-radius: 6px;
-  padding: 12px;
+  padding: 8px;
   box-shadow: 0 0 0 1px var(--cc-board-border), 0 8px 24px rgba(0,0,0,.45);
   display: flex;
   align-items: center;
   justify-content: center;
-  max-width: 100%;
+  max-width: min(100%, calc(100dvh - 56px - 140px));
+  max-height: calc(100dvh - 56px - 120px);
+  min-height: 0;
+  flex-shrink: 1;
+  /* 56px = topbar, 140px = player strips + padding + status */
 }
 .cc-board-wrap {
   display: flex;
   align-items: stretch;
   gap: 6px;
   max-width: 100%;
+  max-height: 100%;
+  min-width: 0;
+  min-height: 0;
 }
 .cc-eval-bar-wrap {
   display: flex;
   align-items: stretch;
   justify-content: center;
-  min-width: 24px;
+  min-width: 20px;
   max-width: 28px;
+  flex-shrink: 0;
 }
 
 /* Status pill: the "White to move" / "Checkmate" bar at the
@@ -641,7 +657,14 @@ body {
    ------------------------------------------------------------
    The outer frame, coordinate edges, and the 8×8 board grid.
    ============================================================ */
-.board-frame { position: relative; display: inline-block; }
+.board-frame {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  max-height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
 
 .coord-box {
   display: grid;
@@ -652,6 +675,10 @@ body {
     "left       board  right"
     "corner-bl  bottom corner-br";
   align-items: stretch;
+  max-width: 100%;
+  max-height: 100%;
+  min-width: 0;
+  min-height: 0;
 }
 .coord-corner { background: transparent; }
 .coord-edge { display: flex; }
@@ -689,6 +716,12 @@ body {
   aspect-ratio: 1 / 1;
   border-radius: 2px;
   overflow: hidden;
+  max-width: 100%;
+  max-height: 100%;
+  min-width: 0;
+  min-height: 0;
+  /* Scale down if height is the constraint: the aspect-ratio grid
+     will shrink the width to match available height. */
 }
 
 /* ============================================================
