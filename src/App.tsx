@@ -954,6 +954,15 @@ function App() {
       const moves = game.historyVerbose();
       const m = moves[moves.length - 1];
       setLastMove(m ? { from: m.from as Square, to: m.to as Square } : null);
+      // Play the move's sound effect so the user hears the moves
+      // as they scrub through the game in review / analysis.
+      if (m) {
+        const isCastle =
+          (m.flags as string).includes('k') || (m.flags as string).includes('q');
+        if (isCastle) emit({ type: 'castle', move: m });
+        else if (m.captured) emit({ type: 'capture', move: m });
+        else emit({ type: 'move', move: m });
+      }
     } else {
       setLastMove(null);
     }
@@ -1011,6 +1020,36 @@ function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [boardFullscreen]);
+
+  // Arrow-key navigation through moves. ←/↓ step backward, →/↑ step
+  // forward, Home/End jump to start/end. We only intercept these
+  // keys when the user isn't typing in an input/textarea.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) {
+        return;
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        onJumpBack();
+      } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        onJumpForward();
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        onJumpStart();
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        onJumpEnd();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // onJumpBack/Forward/Start/End are stable from useCallback below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // If the user is in the middle of a live game, warn them before
   // they navigate away (refresh, close tab, back button). This is
@@ -1339,40 +1378,38 @@ function App() {
           <div className="status-bar" data-status={snapshot.inCheck ? 'check' : ''}>
             {statusText}
           </div>
-          <CapturedRow captures={captures} side={topSide} />
-          {clockEnabled && (
-            <ClockDisplay
-              side={topSide}
-              seconds={topSide === 'w' ? clock.whiteSeconds : clock.blackSeconds}
-              active={clock.running === topSide}
-              label={topSide === 'w' ? 'White' : 'Black'}
-            />
-          )}
-          {showEvalBar && settings.evalBarPosition === 'top' && (
-            <EvalBar
-              scoreCp={scoreCpWhite}
-              scoreMate={scoreMateWhite}
-              showText
-              orientation="horizontal"
-              position="top"
-              title={engine.bestLine ? `Depth ${engine.bestLine.depth}` : 'Eval'}
-              status={engine.status}
-              bestLine={engine.bestLine}
-            />
-          )}
-          <div className={`board-row eval-pos-${settings.evalBarPosition}`}>
-            {showEvalBar && settings.evalBarPosition === 'left' && (
-              <EvalBar
-                scoreCp={scoreCpWhite}
-                scoreMate={scoreMateWhite}
-                showText
-                orientation="vertical"
-                position="left"
-                title={engine.bestLine ? `Depth ${engine.bestLine.depth}` : 'Eval'}
-                status={engine.status}
-                bestLine={engine.bestLine}
-              />
-            )}
+          {/* Two side-columns flanking the board, plus the board with
+           *  a full-height eval bar on the right. Layout: a 3-column
+           *  grid where col 1 = top/bottom player details, col 2 = board,
+           *  col 3 = eval bar. On narrow viewports this collapses. */}
+          <div className="board-row eval-pos-right">
+            {/* Left side: top player details above the board, bottom
+             *  player details below. The two halves are flexed with
+             *  `flex: 1 1 0` so they share the board's height. */}
+            <div className="board-side-col">
+              <div className="board-side-cell top">
+                <CapturedRow captures={captures} side={topSide} />
+                {clockEnabled && (
+                  <ClockDisplay
+                    side={topSide}
+                    seconds={topSide === 'w' ? clock.whiteSeconds : clock.blackSeconds}
+                    active={clock.running === topSide}
+                    label={topSide === 'w' ? 'White' : 'Black'}
+                  />
+                )}
+              </div>
+              <div className="board-side-cell bottom">
+                {clockEnabled && (
+                  <ClockDisplay
+                    side={bottomSide}
+                    seconds={bottomSide === 'w' ? clock.whiteSeconds : clock.blackSeconds}
+                    active={clock.running === bottomSide}
+                    label={bottomSide === 'w' ? 'White' : 'Black'}
+                  />
+                )}
+                <CapturedRow captures={captures} side={bottomSide} />
+              </div>
+            </div>
             <Board
               board={board}
               orientation={orientation}
@@ -1408,7 +1445,7 @@ function App() {
               onDragEnd={handleDragEnd}
               onAnimationDone={() => setAnimatingMove(null)}
             />
-            {showEvalBar && settings.evalBarPosition === 'right' && (
+            {showEvalBar && (
               <EvalBar
                 scoreCp={scoreCpWhite}
                 scoreMate={scoreMateWhite}
@@ -1421,27 +1458,6 @@ function App() {
               />
             )}
           </div>
-          {showEvalBar && settings.evalBarPosition === 'bottom' && (
-            <EvalBar
-              scoreCp={scoreCpWhite}
-              scoreMate={scoreMateWhite}
-              showText
-              orientation="horizontal"
-              position="bottom"
-              title={engine.bestLine ? `Depth ${engine.bestLine.depth}` : 'Eval'}
-              status={engine.status}
-              bestLine={engine.bestLine}
-            />
-          )}
-          {clockEnabled && (
-            <ClockDisplay
-              side={bottomSide}
-              seconds={bottomSide === 'w' ? clock.whiteSeconds : clock.blackSeconds}
-              active={clock.running === bottomSide}
-              label={bottomSide === 'w' ? 'White' : 'Black'}
-            />
-          )}
-          <CapturedRow captures={captures} side={bottomSide} />
           {isGameEnded && !isReviewMode && (
             <div className="post-game-actions">
               <button className="primary-action" onClick={onReview}>
