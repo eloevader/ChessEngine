@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Board } from './components/Board';
 import { MoveHistory } from './components/MoveHistory';
 import { ThreatsPanel } from './components/ThreatsPanel';
@@ -334,28 +334,56 @@ function App() {
   }, [theme, effectiveLight, effectiveDark]);
 
   // -------- Move execution --------
+  // tryMove is a stable callback — internal closures that depend
+  // on `clock`, `engine`, `game`, etc. read from refs so the
+  // callback identity doesn't change on every render (which
+  // would cascade and trigger React error #185 — infinite render).
+  const gameRef = useRef(game);
+  gameRef.current = game;
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  const reviewingRef = useRef(reviewing);
+  reviewingRef.current = reviewing;
+  const fullHistoryRef = useRef(fullHistory);
+  fullHistoryRef.current = fullHistory;
+  const viewPlyRef = useRef(viewPly);
+  viewPlyRef.current = viewPly;
+  const snapshotRef = useRef(snapshot);
+  snapshotRef.current = snapshot;
+  const gameEndReasonRef = useRef(gameEndReason);
+  gameEndReasonRef.current = gameEndReason;
+  const clockEnabledRef = useRef(clockEnabled);
+  clockEnabledRef.current = clockEnabled;
+  const clockSwitchToRef = useRef(clock.switchTo);
+  clockSwitchToRef.current = clock.switchTo;
+  const clockAddIncrementRef = useRef(clock.addIncrement);
+  clockAddIncrementRef.current = clock.addIncrement;
+  const emitRef = useRef(emit);
+  emitRef.current = emit;
+
   const tryMove = useCallback(
     (from: Square, to: Square, promotion?: 'q' | 'r' | 'b' | 'n') => {
-      const piece = game.pieceAt(from);
+      const g = gameRef.current;
+      const piece = g.pieceAt(from);
       if (!piece) return null;
       // If we're in review mode and the user makes a move from a
       // mid-game position, exit review and resume the game
       // (chess.com-style "Return to game from this move").
-      if (reviewing && (snapshot.isGameOver || gameEndReason)) {
+      if (reviewingRef.current && (snapshotRef.current.isGameOver || gameEndReasonRef.current)) {
         setReviewing(false);
-        const replay = fullHistory.slice(0, viewPly);
-        game.reset();
+        const replay = fullHistoryRef.current.slice(0, viewPlyRef.current);
+        g.reset();
         for (const san of replay) {
           try {
-            game.moveSan(san);
+            g.moveSan(san);
           } catch {
             break;
           }
         }
       }
-      const result = game.move(from, to, promotion);
+      const result = g.move(from, to, promotion);
       if (!result) {
-        emit({ type: 'illegal' });
+        emitRef.current({ type: 'illegal' });
         return null;
       }
       const captured = result.captured
@@ -370,28 +398,28 @@ function App() {
       };
       setLastMove({ from: result.from as Square, to: result.to as Square });
       setAnimatingMove(anim);
-      setFen(game.fen());
+      setFen(g.fen());
       setViewPly((v) => v + 1);
       setFullHistory((h) => {
         // If we're in analysis mode (or in any mode where the user
         // has rewound and is now making a new move), truncate any
         // moves after the current view position. The new move
         // becomes the only continuation from here.
-        if (settings.gameMode === 'analysis') {
-          return [...h.slice(0, viewPly), result.san];
+        if (settingsRef.current.gameMode === 'analysis') {
+          return [...h.slice(0, viewPlyRef.current), result.san];
         }
         return [...h, result.san];
       });
-      if (clockEnabled) {
+      if (clockEnabledRef.current) {
         // Snapshot the time left on the mover's clock (after the
-        // increment) for the move list. Convention: store the time
-        // REMAINING on the mover's clock after the move.
+        // increment) for the move list.
         const moverSide = result.color;
-        const remaining = moverSide === 'w' ? clock.whiteSeconds : clock.blackSeconds;
-        const finalTime = remaining + clock.incrementSeconds;
+        const c = clockRef.current;
+        const remaining = moverSide === 'w' ? c.whiteSeconds : c.blackSeconds;
+        const finalTime = remaining + c.incrementSeconds;
         setMoveTimes((t) => [...t, finalTime]);
-        clock.addIncrement(result.color);
-        clock.switchTo(game.turn());
+        clockAddIncrementRef.current(result.color);
+        clockSwitchToRef.current(g.turn());
       } else {
         setMoveTimes((t) => [...t, 0]);
       }
@@ -403,35 +431,29 @@ function App() {
         });
       }
 
+      const emit = emitRef.current;
       if (result.isCastle) emit({ type: 'castle', move: result });
       else if (result.isCapture) emit({ type: 'capture', move: result });
       else emit({ type: 'move', move: result });
 
-      const nextSnap = game.snapshot();
+      const nextSnap = g.snapshot();
       if (nextSnap.isCheckmate) emit({ type: 'checkmate' });
       else if (nextSnap.isStalemate || nextSnap.isDraw) emit({ type: 'draw' });
       else if (nextSnap.inCheck) emit({ type: 'check' });
 
-      if (settings.flipAfterMove && settings.gameMode !== 'computer') {
+      const s = settingsRef.current;
+      if (s.flipAfterMove && s.gameMode !== 'computer') {
         setTimeout(
           () => setOrientation((o) => (o === 'w' ? 'b' : 'w')),
-          ANIMATION_DURATIONS_MS[settings.animationSpeed],
+          ANIMATION_DURATIONS_MS[s.animationSpeed],
         );
       }
       return result;
     },
-    [
-      clock,
-      clockEnabled,
-      emit,
-      settings.animationSpeed,
-      settings.flipAfterMove,
-      reviewing,
-      fullHistory,
-      viewPly,
-      snapshot.isGameOver,
-      gameEndReason,
-    ],
+    // Empty deps: the callback is stable across renders. All external
+    // values are read through refs (declared above). This prevents the
+    // infinite re-render loop that React error #185 was tripping.
+    [],
   );
 
   // -------- Click handling --------
@@ -948,24 +970,32 @@ function App() {
   const isReviewMode = reviewing && isGameEnded;
 
   // Auto-stop engine if game ended. Also stop the clock so the
-  // user can review without the time ticking.
+  // user can review without the time ticking. We reference the
+  // clock via a ref so we don't re-fire this effect every render
+  // (the useChessClock hook returns a new object each render, which
+  // would otherwise cause an infinite update loop).
+  const clockRef = useRef(clock);
+  clockRef.current = clock;
+  const engineStopRef = useRef(engineStop);
+  engineStopRef.current = engineStop;
   useEffect(() => {
     if (isGameEnded) {
-      void engineStop();
-      clock.switchTo(null);
+      void engineStopRef.current();
+      clockRef.current.switchTo(null);
       setPreMoveQueue([]);
       setPendingPreMoveFrom(null);
     }
-  }, [isGameEnded, clock, engineStop]);
+  }, [isGameEnded]);
 
   // Pause the clock whenever we're in review mode (chess.com-style:
   // review freezes the clock so the user can analyze without
-  // pressure).
+  // pressure). We use a ref to `clock` so this doesn't re-run on
+  // every render (the chess clock returns a new object each render).
   useEffect(() => {
     if (isReviewMode) {
-      clock.switchTo(null);
+      clockRef.current.switchTo(null);
     }
-  }, [isReviewMode, clock]);
+  }, [isReviewMode]);
 
   // Esc key exits fullscreen board mode.
   useEffect(() => {
@@ -1481,14 +1511,14 @@ function App() {
               game. Resign and Draw are shown as game actions below.
             */}
             {!isLivePlay && (
-              <button onClick={() => setNewGameOpen(true)}>New Game</button>
-            )}
-            {!isLivePlay && !isGameEnded && fullHistory.length > 0 && (
               <button
                 onClick={() => {
-                  if (window.confirm('This will discard your current game. Continue?')) {
-                    setNewGameOpen(true);
+                  if (!isGameEnded && fullHistory.length > 0) {
+                    if (!window.confirm('This will discard your current game. Continue?')) {
+                      return;
+                    }
                   }
+                  setNewGameOpen(true);
                 }}
               >
                 New Game
@@ -1496,18 +1526,13 @@ function App() {
             )}
             {!isLivePlay && (
               <button
-                onClick={() => setLichessOpen(true)}
-                title="Import a game from Lichess"
-              >
-                Lichess
-              </button>
-            )}
-            {!isLivePlay && isGameEnded && fullHistory.length > 0 && (
-              <button
                 onClick={() => {
-                  if (window.confirm('Replace the current game with an imported one?')) {
-                    setLichessOpen(true);
+                  if (!isGameEnded && fullHistory.length > 0) {
+                    if (!window.confirm('Replace the current game with an imported one?')) {
+                      return;
+                    }
                   }
+                  setLichessOpen(true);
                 }}
                 title="Import a game from Lichess"
               >

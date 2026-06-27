@@ -75,28 +75,48 @@ body {
   opacity: 0.9;
 }
 
-/* ===== Layout ===== */
+/* ===== Layout =====
+   The page is FIXED — it never scrolls. The board area is centered
+   in the viewport, the side panel is a fixed-width column next to
+   it. If the viewport is too small for the side panel, the side
+   panel scrolls internally (the page itself does not). The
+   `.board-fullscreen` modifier on `.app` hides the side panel and
+   expands the board to fill the viewport. */
+html, body, #root { height: 100%; margin: 0; padding: 0; }
+body { overflow: hidden; }
+
 .app {
-  min-height: 100vh;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 .app-main {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
   gap: 24px;
   align-items: start;
-  max-width: 1080px;
+  width: 100%;
+  max-width: 1180px;
   margin: 0 auto;
-  padding: 16px 20px 40px;
+  padding: 16px 20px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
-/* Desktop + tablet: sticky board area so it stays at the top of the viewport
-   while the user scrolls the move list. */
+/* Board area is a flex column. It centers the board in the
+   available space and the meta / status bars sit above it. */
 .board-area {
   display: flex;
   flex-direction: column;
-  align-items: stretch;
+  align-items: center;
+  justify-content: center;
   gap: 6px;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   position: sticky;
   top: 8px;
   align-self: start;
@@ -107,12 +127,12 @@ body {
   flex-direction: column;
   gap: 14px;
   min-width: 0;
+  height: 100%;
   max-height: calc(100vh - 32px);
   overflow-y: auto;
-  position: sticky;
-  top: 16px;
   align-self: start;
   padding-top: 0;
+  min-height: 0;
 }
 
 /* On tablets, side panel goes below the board and stacks. */
