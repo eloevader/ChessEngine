@@ -1,5 +1,5 @@
 import { useSettingsDraft } from '../settings/SettingsStore';
-import type { AnimationSpeed, AnimationStyle, SoundPack, CoordDisplay, EvalBarPosition } from '../settings/SettingsStore';
+import type { AnimationSpeed, AnimationStyle, SoundPack, CoordDisplay, EvalBarPosition, EngineMode } from '../settings/SettingsStore';
 import { BOARD_THEMES, getTheme } from '../chess/themes';
 import { PIECE_SETS, pieceImageUrl, type PieceSetId } from '../chess/pieces';
 
@@ -222,6 +222,38 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                 ))}
               </div>
             </div>
+          </section>
+
+          <section className="settings-section">
+            <h3>Engine</h3>
+            <div className="setting-row">
+              <label>Engine backend</label>
+              <div className="seg-group">
+                <button
+                  className={`seg ${draft.engineMode === 'local' ? 'selected' : ''}`}
+                  onClick={() => updateDraft({ engineMode: 'local' })}
+                  title="Connect to stockfish-bridge.js via WebSocket"
+                >
+                  Local bridge
+                </button>
+                <button
+                  className={`seg ${draft.engineMode === 'wasm' ? 'selected' : ''}`}
+                  onClick={() => updateDraft({ engineMode: 'wasm' })}
+                  title="Run Stockfish in-browser via WebAssembly"
+                >
+                  In-browser (WASM)
+                </button>
+              </div>
+            </div>
+            {draft.engineMode === 'wasm' && (
+              <p className="setting-note">
+                WASM mode requires{' '}
+                <code>Cross-Origin-Embedder-Policy: require-corp</code> and{' '}
+                <code>Cross-Origin-Opener-Policy: same-origin</code> headers
+                on the deployment (the dev server already has them). If
+                these headers are missing, the engine may fail silently.
+              </p>
+            )}
           </section>
 
           <section className="settings-section">

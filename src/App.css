@@ -1243,6 +1243,7 @@ body {
 }
 .setting-row > label { flex: 0 0 140px; color: var(--cc-text-dim); font-size: 14px; }
 .setting-value { color: var(--cc-text-dim); font-size: 13px; min-width: 36px; text-align: right; }
+.setting-note { color: var(--cc-text-dim); font-size: 12px; line-height: 1.5; margin: 6px 0 0 0; }
 
 /* Theme grid */
 .theme-grid {

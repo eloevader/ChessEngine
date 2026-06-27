@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# stockfish.wasm files are copied from node_modules via the Vite plugin
+/public/stockfish/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

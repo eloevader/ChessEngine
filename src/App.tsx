@@ -116,7 +116,7 @@ function pickEngineSide(playerSide: PlayerSide): 'w' | 'b' {
 function App() {
   const settings = useSettings();
   const { emit } = useSound();
-  const engine = useEngine();
+  const engine = useEngine(settings.engineMode);
   const clock = useChessClock();
   // Destructure the bits of the engine we use inside effects so each dep is a
   // stable primitive/callback rather than the whole (memoized) engine object.

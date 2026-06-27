@@ -9,6 +9,7 @@ export type GameMode = 'local' | 'computer' | 'analysis';
 export type PlayerSide = 'w' | 'b' | 'random';
 export type EngineLevel = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 export type EvalBarPosition = 'left' | 'right' | 'top' | 'bottom';
+export type EngineMode = 'local' | 'wasm';
 
 export interface Settings {
   boardThemeId: string;
@@ -47,9 +48,12 @@ export interface Settings {
   /** Show a small "from"/"to" label on the source and destination
    *  squares of the last move (chess.com-style). */
   moveNotationOnBoard: boolean;
+  /** Engine backend: 'local' = WebSocket bridge (stockfish-bridge.js),
+   *  'wasm' = in-browser Stockfish via stockfish.wasm. */
+  engineMode: EngineMode;
 }
 
-const STORAGE_KEY = 'chess-analyzer.settings.v8';
+const STORAGE_KEY = 'chess-analyzer.settings.v9';
 // Older keys we may have used previously. We don't read from them, but we
 // delete them on load so users who upgrade don't get stuck on stale settings.
 const LEGACY_STORAGE_KEYS = [
@@ -91,6 +95,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showThreats: true,
   threatScope: 'lastMove',
   moveNotationOnBoard: true,
+  engineMode: 'local',
 };
 
 function loadSettings(): Settings {

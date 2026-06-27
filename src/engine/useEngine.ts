@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StockfishEngine, THINK_TIME_MS, type EngineLine } from './StockfishEngine';
+import { WasmStockfishEngine } from './WasmStockfishEngine';
+import type { EngineMode } from '../settings/SettingsStore';
 
 export type EngineStatus = 'idle' | 'loading' | 'ready' | 'thinking' | 'error';
 
@@ -32,7 +34,19 @@ export interface UseEngineReturn {
   clearBestMove: () => void;
 }
 
-export function useEngine(): UseEngineReturn {
+type EngineHandle = StockfishEngine | WasmStockfishEngine;
+
+function createEngine(mode: EngineMode): EngineHandle {
+  return mode === 'local'
+    ? new StockfishEngine('ws://localhost:8765')
+    : new WasmStockfishEngine();
+}
+
+function destroyEngine(eng: EngineHandle): void {
+  eng.destroy();
+}
+
+export function useEngine(engineMode: EngineMode = 'local'): UseEngineReturn {
   const [status, setStatus] = useState<EngineStatus>('loading');
   const [error, setError] = useState<string | null>(null);
   const [bestLine, setBestLine] = useState<EngineLine | null>(null);
@@ -41,12 +55,23 @@ export function useEngine(): UseEngineReturn {
   const [scoreMate, setScoreMate] = useState<number | null>(null);
   const [bestMove, setBestMove] = useState<string | null>(null);
 
-  const engineRef = useRef<StockfishEngine | null>(null);
+  const engineRef = useRef<EngineHandle | null>(null);
   const debounceRef = useRef<number | null>(null);
+  const modeRef = useRef<EngineMode>(engineMode);
 
   useEffect(() => {
-    const eng = new StockfishEngine('ws://localhost:8765');
+    if (engineRef.current && modeRef.current === engineMode) return;
+    modeRef.current = engineMode;
+
+    // Destroy old engine if mode changed
+    if (engineRef.current) {
+      destroyEngine(engineRef.current);
+      engineRef.current = null;
+    }
+
+    const eng = createEngine(engineMode);
     engineRef.current = eng;
+
     const off = eng.onMessage((msg) => {
       if (msg.type === 'status') {
         if (msg.status === 'connecting') {
@@ -81,16 +106,18 @@ export function useEngine(): UseEngineReturn {
         setBestMove(msg.move);
       }
     });
-    // Start init
+
     eng.init().catch((err) => {
       setError((err as Error).message);
       setStatus('error');
     });
+
     return () => {
       off();
-      eng.destroy();
+      destroyEngine(eng);
+      engineRef.current = null;
     };
-  }, []);
+  }, [engineMode]);
 
   const startEngineEval = useCallback(
     async (
