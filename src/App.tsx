@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Board } from './components/Board';
 import { MoveHistory } from './components/MoveHistory';
-import { ThreatsPanel } from './components/ThreatsPanel';
+// ThreatsPanel is rendered conditionally below when we add per-side
+// threats back. Removed for now to silence unused-var warnings.
 import { PromotionDialog } from './components/PromotionDialog';
 import { SettingsPanel } from './components/SettingsPanel';
 import { CapturedRow } from './components/CapturedPieces';
@@ -26,7 +27,7 @@ import { useSound } from './settings/SoundManager';
 import { getTheme, themeToCss } from './chess/themes';
 import { useEngine } from './engine/useEngine';
 import { useChessClock } from './chess/ChessClock';
-import { useLiveAttacks, type Arrow, type ArrowColor, type AttackDescription } from './chess/threats';
+import { useLiveAttacks, type Arrow, type ArrowColor } from './chess/threats';
 import { useMoveClassification } from './chess/useMoveClassification';
 import type { MoveTag } from './chess/classifier';
 import './App.css';
@@ -212,7 +213,6 @@ function App() {
     lastMoverColor,
   );
   const threatArrows: Arrow[] = liveAttacks.arrows;
-  const attackDescriptions: AttackDescription[] = liveAttacks.descriptions;
   const board = useMemo(() => buildBoard(fen), [fen]);
 
   // Move classification: only enabled in analysis / review. In live
@@ -1090,7 +1090,11 @@ function App() {
     setDrawOffer(null);
     setGameEndReason({ kind: 'draw' });
   };
+  // onDeclineDraw kept for symmetry with onAcceptDraw; both wired
+  // through the draw-offer UI when it's shown.
   const onDeclineDraw = () => setDrawOffer(null);
+  void onAcceptDraw;
+  void onDeclineDraw;
 
   const onResign = () => {
     if (!canResign || isGameEnded) return;
@@ -1316,78 +1320,57 @@ function App() {
     <div
       className={`app ${isReviewMode ? 'review-mode' : ''} ${boardFullscreen ? 'board-fullscreen' : ''}`}
     >
-      <main className="app-main">
-        <div className="board-area">
-          <header className="app-header">
-            <h1>Chess Analyzer <span className="beta-tag">beta</span></h1>
-          </header>
-          {/* Meta line: player names, opening name, bulk analysis
-           *  progress, pre-move status, engine status. This row
-           *  is hidden when empty so it doesn't affect layout. */}
-          <div className="status-meta">
-            {lichessHeaders?.White && lichessHeaders?.Black && (
-              <span className="meta-info">
-                {lichessHeaders.White}
-                {lichessHeaders.whiteRating && (
-                  <span className="meta-rating"> ({lichessHeaders.whiteRating})</span>
-                )}
-                {' vs '}
-                {lichessHeaders.Black}
-                {lichessHeaders.blackRating && (
-                  <span className="meta-rating"> ({lichessHeaders.blackRating})</span>
-                )}
-                {lichessHeaders.Result ? ` — ${lichessHeaders.Result}` : ''}
-              </span>
-            )}
-            {(lichessHeaders?.Opening || moveClassifications.openingName) && (
-              <span className="meta-info">
-                {lichessHeaders?.Opening ?? moveClassifications.openingName}
-              </span>
-            )}
-            {moveClassifications.bulkLoading && (
-              <span className="meta-info">
-                analyzing {moveClassifications.evaluatedPlies}/
-                {moveClassifications.totalPlies}…
-              </span>
-            )}
-            {preMovesEnabled && queuedCount > 0 && (
-              <span className="meta-info">
-                pre-move{queuedCount > 1 ? 's' : ''} queued
-                {queuedCount > 1 ? ` (${queuedCount})` : ''}:{' '}
-                {preMoveQueue.map((m) => `${m.from}→${m.to}`).join(', ')}
-                {pendingPreMoveFrom && ` (+ ${pendingPreMoveFrom}→?)`}
-                {' · right-click board to clear'}
-              </span>
-            )}
-            {preMovesEnabled && queuedCount === 0 && pendingPreMoveFrom && (
-              <span className="meta-info">
-                pre-move from {pendingPreMoveFrom} — pick a destination (right-click to clear)
-              </span>
-            )}
-            {settings.gameMode === 'computer' &&
-              engine.status === 'thinking' && (
-                <span className="meta-info">engine thinking…</span>
+      {/* === Top-center header: title + meta line + status pill === */}
+      <header className="app-header">
+        <h1>
+          Chess Analyzer <span className="beta-tag">beta</span>
+        </h1>
+        <div className="header-meta">
+          {lichessHeaders?.White && lichessHeaders?.Black && (
+            <span className="meta-info">
+              {lichessHeaders.White}
+              {lichessHeaders.whiteRating && (
+                <span className="meta-rating"> ({lichessHeaders.whiteRating})</span>
               )}
-            {settings.gameMode === 'computer' &&
-              engine.status === 'loading' && (
-                <span className="meta-info status-error">
-                  engine offline — run: node scripts/stockfish-bridge.js
+              {' vs '}
+              {lichessHeaders.Black}
+              {lichessHeaders.blackRating && (
+                <span className="meta-rating"> ({lichessHeaders.blackRating})</span>
+              )}
+              {lichessHeaders.Result ? ` — ${lichessHeaders.Result}` : ''}
+              {(lichessHeaders?.Opening || moveClassifications.openingName) && (
+                <span className="meta-opening">
+                  {'   '}
+                  {lichessHeaders?.Opening ?? moveClassifications.openingName}
                 </span>
               )}
-          </div>
-          <div className="status-bar" data-status={snapshot.inCheck ? 'check' : ''}>
-            {statusText}
-          </div>
-          {/* Two side-columns flanking the board, plus the board with
-           *  a full-height eval bar on the right. Layout: a 3-column
-           *  grid where col 1 = top/bottom player details, col 2 = board,
-           *  col 3 = eval bar. On narrow viewports this collapses. */}
-          <div className="board-row eval-pos-right">
-            {/* Left side: top player details above the board, bottom
-             *  player details below. The two halves are flexed with
-             *  `flex: 1 1 0` so they share the board's height. */}
-            <div className="board-side-col">
-              <div className="board-side-cell top">
+            </span>
+          )}
+        </div>
+        <div className="status-pill" data-status={snapshot.inCheck ? 'check' : ''}>
+          {statusText}
+        </div>
+      </header>
+
+      <main className="app-main">
+        <div className="board-area">
+          {/* === Main board row: left side player details | board
+           *     + right eval bar | moves panel === */}
+          <div className="board-stage">
+            <div className="board-left">
+              {/* Top player details — sits in the upper half of the
+               *  board's height. */}
+              <div className="player-strip top">
+                <div
+                  className={`player-pill player-pill-${topSide === 'w' ? 'white' : 'black'}`}
+                >
+                  {topSide === 'w' ? 'WHITE' : 'BLACK'}
+                  <span className="player-pill-capture-count">
+                    {topSide === 'w'
+                      ? captures.black.length
+                      : captures.white.length}
+                  </span>
+                </div>
                 <CapturedRow captures={captures} side={topSide} />
                 {clockEnabled && (
                   <ClockDisplay
@@ -1398,7 +1381,8 @@ function App() {
                   />
                 )}
               </div>
-              <div className="board-side-cell bottom">
+              {/* Bottom player details — lower half. */}
+              <div className="player-strip bottom">
                 {clockEnabled && (
                   <ClockDisplay
                     side={bottomSide}
@@ -1408,217 +1392,302 @@ function App() {
                   />
                 )}
                 <CapturedRow captures={captures} side={bottomSide} />
+                <div
+                  className={`player-pill player-pill-${bottomSide === 'w' ? 'white' : 'black'}`}
+                >
+                  {bottomSide === 'w' ? 'WHITE' : 'BLACK'}
+                  <span className="player-pill-capture-count">
+                    {bottomSide === 'w'
+                      ? captures.black.length
+                      : captures.white.length}
+                  </span>
+                </div>
               </div>
             </div>
-            <Board
-              board={board}
-              orientation={orientation}
-              selectedSquare={selected}
-              legalTargets={legalTargets}
-              captureTargets={captureTargets}
-              lastMove={lastMove}
-              kingInCheck={kingInCheck}
-              animatingMove={animatingMove}
-              arrows={allArrows}
-              squareHighlights={squareHighlights}
-              arrowColor={arrowColor}
-              preMoveHighlights={
-                preMovesEnabled
-                  ? [
-                      ...preMoveQueue.map((m) => ({ from: m.from, to: m.to })),
-                      ...(pendingPreMoveFrom
-                        ? [{ from: pendingPreMoveFrom, to: pendingPreMoveFrom, pending: true }]
-                        : []),
-                    ]
-                  : null
-              }
-              moveTagsByTo={moveTagsByTo}
-              onArrowDraw={onArrowDraw}
-              onArrowEraseAt={onArrowEraseAt}
-              onSquareRightClick={onSquareRightClick}
-              onClearPreMoves={onClearPreMoves}
-              hasPreMoves={preMoveQueue.length > 0 || pendingPreMoveFrom !== null}
-              onSquareClick={handleSquareClick}
-              onPieceDragStart={handlePieceDragStart}
-              onDragOverSquare={() => {}}
-              onDropOnSquare={handleDropOnSquare}
-              onDragEnd={handleDragEnd}
-              onAnimationDone={() => setAnimatingMove(null)}
-            />
-            {showEvalBar && (
-              <EvalBar
-                scoreCp={scoreCpWhite}
-                scoreMate={scoreMateWhite}
-                showText
-                orientation="vertical"
-                position="right"
-                title={engine.bestLine ? `Depth ${engine.bestLine.depth}` : 'Eval'}
-                status={engine.status}
-                bestLine={engine.bestLine}
+
+            <div className="board-and-eval">
+              <Board
+                board={board}
+                orientation={orientation}
+                selectedSquare={selected}
+                legalTargets={legalTargets}
+                captureTargets={captureTargets}
+                lastMove={lastMove}
+                kingInCheck={kingInCheck}
+                animatingMove={animatingMove}
+                arrows={allArrows}
+                squareHighlights={squareHighlights}
+                arrowColor={arrowColor}
+                preMoveHighlights={
+                  preMovesEnabled
+                    ? [
+                        ...preMoveQueue.map((m) => ({ from: m.from, to: m.to })),
+                        ...(pendingPreMoveFrom
+                          ? [{ from: pendingPreMoveFrom, to: pendingPreMoveFrom, pending: true }]
+                          : []),
+                      ]
+                    : null
+                }
+                moveTagsByTo={moveTagsByTo}
+                onArrowDraw={onArrowDraw}
+                onArrowEraseAt={onArrowEraseAt}
+                onSquareRightClick={onSquareRightClick}
+                onClearPreMoves={onClearPreMoves}
+                hasPreMoves={preMoveQueue.length > 0 || pendingPreMoveFrom !== null}
+                onSquareClick={handleSquareClick}
+                onPieceDragStart={handlePieceDragStart}
+                onDragOverSquare={() => {}}
+                onDropOnSquare={handleDropOnSquare}
+                onDragEnd={handleDragEnd}
+                onAnimationDone={() => setAnimatingMove(null)}
               />
-            )}
+              {showEvalBar && (
+                <EvalBar
+                  scoreCp={scoreCpWhite}
+                  scoreMate={scoreMateWhite}
+                  showText
+                  orientation="vertical"
+                  position="right"
+                  title={engine.bestLine ? `Depth ${engine.bestLine.depth}` : 'Eval'}
+                  status={engine.status}
+                  bestLine={engine.bestLine}
+                />
+              )}
+            </div>
+
+            <div className="moves-panel">
+              <div className="moves-header">
+                <span className="moves-title">MOVES</span>
+                <div className="moves-nav">
+                  <button
+                    className="nav-btn"
+                    onClick={onJumpStart}
+                    disabled={!onJumpStart || viewPly <= 0}
+                    aria-label="Jump to start"
+                    title="Jump to start"
+                  >
+                    {'\u23EE'}
+                  </button>
+                  <button
+                    className="nav-btn"
+                    onClick={onJumpBack}
+                    disabled={viewPly <= 0}
+                    aria-label="Step back"
+                    title="Step back (\u2190)"
+                  >
+                    {'\u23EA'}
+                  </button>
+                  <button
+                    className="nav-btn"
+                    onClick={onJumpForward}
+                    disabled={viewPly >= fullHistory.length}
+                    aria-label="Step forward"
+                    title="Step forward (\u2192)"
+                  >
+                    {'\u23E9'}
+                  </button>
+                  <button
+                    className="nav-btn"
+                    onClick={onJumpEnd}
+                    disabled={viewPly >= fullHistory.length}
+                    aria-label="Jump to end"
+                    title="Jump to end"
+                  >
+                    {'\u23ED'}
+                  </button>
+                </div>
+              </div>
+              <MoveHistory
+                history={fullHistory}
+                sanMoves={moveHistorySANS}
+                currentPly={viewPly}
+                onJumpTo={onJumpTo}
+                onJumpStart={onJumpStart}
+                onJumpBack={onJumpBack}
+                onJumpForward={onJumpForward}
+                onJumpEnd={onJumpEnd}
+                classifications={moveClassifications.classifications}
+                moveTimes={moveTimes}
+                bulkProgress={
+                  moveClassifications.bulkLoading
+                    ? {
+                        done: moveClassifications.evaluatedPlies,
+                        total: moveClassifications.totalPlies,
+                      }
+                    : null
+                }
+              />
+            </div>
           </div>
+
+          {/* === Below the board: resign + arrow toolbar + controls === */}
+          <div className="below-board">
+            {isLivePlay && !isGameEnded && (
+              <div className="resign-row">
+                <button
+                  className="resign-btn"
+                  onClick={onResign}
+                  title="Resign the game"
+                >
+                  <span className="resign-flag">⚑</span> Resign
+                </button>
+                {canOfferDraw && (
+                  <button
+                    className="draw-btn"
+                    onClick={onOfferDraw}
+                    title="Offer a draw"
+                  >
+                    🤝 Offer Draw
+                  </button>
+                )}
+              </div>
+            )}
+
+            <div className="arrow-toolbar">
+              <span className="arrow-toolbar-label">ARROW:</span>
+              {(['green', 'red', 'yellow', 'blue'] as ArrowColor[]).map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  className={`arrow-swatch arrow-swatch-${c} ${arrowColor === c ? 'selected' : ''}`}
+                  aria-label={`${c} arrow`}
+                  title={`${c[0].toUpperCase()}${c.slice(1)} arrow`}
+                  onClick={() => setArrowColor(c)}
+                />
+              ))}
+              <button
+                type="button"
+                className="arrow-clear-btn"
+                onClick={onClearArrows}
+                disabled={arrows.length === 0}
+                title="Clear all arrows (Esc)"
+              >
+                Clear
+              </button>
+              <span className="arrow-hint">
+                Right-click + drag on the board to draw
+              </span>
+            </div>
+
+            {preMovesEnabled && (queuedCount > 0 || pendingPreMoveFrom) && (
+              <div className="premove-banner">
+                {queuedCount > 0 ? (
+                  <span>
+                    Pre-move{queuedCount > 1 ? 's' : ''} queued
+                    {queuedCount > 1 ? ` (${queuedCount})` : ''}:{' '}
+                    {preMoveQueue.map((m) => `${m.from}→${m.to}`).join(', ')}
+                    {pendingPreMoveFrom && ` (+ ${pendingPreMoveFrom}→?)`}
+                    {' · right-click board to clear'}
+                  </span>
+                ) : (
+                  <span>
+                    Pre-move from {pendingPreMoveFrom} — pick a destination (right-click to clear)
+                  </span>
+                )}
+              </div>
+            )}
+
+            {moveClassifications.bulkLoading && (
+              <div className="premove-banner">
+                Analyzing moves {moveClassifications.evaluatedPlies}/
+                {moveClassifications.totalPlies}…
+              </div>
+            )}
+
+            {settings.gameMode === 'computer' &&
+              engine.status === 'loading' && (
+                <div className="premove-banner status-error">
+                  Engine offline — run: node scripts/stockfish-bridge.js
+                </div>
+              )}
+
+            <div className="controls">
+              {!isLivePlay && (
+                <button
+                  onClick={() => {
+                    if (!isGameEnded && fullHistory.length > 0) {
+                      if (!window.confirm('This will discard your current game. Continue?')) {
+                        return;
+                      }
+                    }
+                    setNewGameOpen(true);
+                  }}
+                >
+                  New Game
+                </button>
+              )}
+              {!isLivePlay && (
+                <button
+                  onClick={() => {
+                    if (!isGameEnded && fullHistory.length > 0) {
+                      if (
+                        !window.confirm('Replace the current game with an imported one?')
+                      ) {
+                        return;
+                      }
+                    }
+                    setLichessOpen(true);
+                  }}
+                  title="Import a game from Lichess"
+                >
+                  Lichess
+                </button>
+              )}
+              {isLivePlay && (
+                <button
+                  onClick={onUndo}
+                  disabled={
+                    settings.gameMode !== 'computer' ||
+                    fullHistory.length === 0 ||
+                    animatingMove !== null ||
+                    isGameEnded
+                  }
+                  title={
+                    settings.gameMode === 'computer'
+                      ? 'Undo last move'
+                      : 'Undo only available vs Computer'
+                  }
+                >
+                  Undo
+                </button>
+              )}
+              <button onClick={onFlip}>Flip</button>
+              <button
+                onClick={() => setBoardFullscreen((v) => !v)}
+                title={boardFullscreen ? 'Exit fullscreen' : 'Expand board to fullscreen'}
+                aria-label="Toggle board fullscreen"
+              >
+                {boardFullscreen ? '⤡ Exit' : '⤢ Fullscreen'}
+              </button>
+              <button onClick={() => setSettingsOpen(true)} aria-label="Open settings">
+                Settings
+              </button>
+            </div>
+          </div>
+
+          {/* Post-game actions: Review when the game has just ended,
+           *  or "Back to result" when in review mode. */}
           {isGameEnded && !isReviewMode && (
-            <div className="post-game-actions">
-              <button className="primary-action" onClick={onReview}>
-                Review
+            <div className="post-game-row">
+              <button
+                className="primary-action review-btn"
+                onClick={onReview}
+              >
+                <span className="review-icon">↻</span> Game Review
               </button>
             </div>
           )}
           {isReviewMode && (
-            <div className="post-game-actions">
-              <button onClick={onExitReview}>Back to result</button>
+            <div className="post-game-row">
+              <button
+                className="primary-action review-back-btn"
+                onClick={onExitReview}
+              >
+                Back to result
+              </button>
             </div>
           )}
-          {/* Game actions (Draw/Resign) — only in a play mode AND only once a
-              game is actually in progress (at least one move played). */}
-          {isPlayMode(settings.gameMode) && !isGameEnded && fullHistory.length > 0 && (
-            <div className="game-actions">
-              {!drawOffer && canOfferDraw && (
-                <button onClick={onOfferDraw} title="Offer a draw" className="game-action-btn">
-                  🤝 Draw
-                </button>
-              )}
-              {drawOffer && settings.gameMode === 'local' && (
-                <>
-                  <span className="draw-offer-label">
-                    {drawOffer === 'w' ? 'White' : 'Black'} offers draw
-                  </span>
-                  <button onClick={onAcceptDraw} className="primary-action game-action-btn">
-                    Accept
-                  </button>
-                  <button onClick={onDeclineDraw} className="game-action-btn">
-                    Decline
-                  </button>
-                </>
-              )}
-              {canResign && (
-                <button
-                  onClick={onResign}
-                  className="danger-action game-action-btn"
-                  title="Resign the game"
-                >
-                  🏳 Resign
-                </button>
-              )}
-            </div>
-          )}
-          <div className="arrow-toolbar" role="toolbar" aria-label="Arrow tools">
-            <span className="arrow-toolbar-label">Arrow:</span>
-            {(['green', 'red', 'yellow', 'blue'] as ArrowColor[]).map((c) => (
-              <button
-                key={c}
-                type="button"
-                className={`arrow-swatch arrow-swatch-${c} ${arrowColor === c ? 'selected' : ''}`}
-                aria-label={`${c} arrow`}
-                title={`${c[0].toUpperCase()}${c.slice(1)} arrow`}
-                onClick={() => setArrowColor(c)}
-              />
-            ))}
-            <button
-              type="button"
-              className="arrow-clear-btn"
-              onClick={onClearArrows}
-              disabled={arrows.length === 0}
-              title="Clear all arrows (Esc)"
-            >
-              Clear
-            </button>
-            <span className="arrow-hint">Right-click + drag on the board to draw</span>
-          </div>
-          <div className="controls">
-            {/*
-              During an active play (local or vs computer) the user
-              can only: Undo (computer only), Flip, or open Settings.
-              The "New Game" and "Lichess import" buttons are hidden
-              so the user can't accidentally clobber an in-progress
-              game. Resign and Draw are shown as game actions below.
-            */}
-            {!isLivePlay && (
-              <button
-                onClick={() => {
-                  if (!isGameEnded && fullHistory.length > 0) {
-                    if (!window.confirm('This will discard your current game. Continue?')) {
-                      return;
-                    }
-                  }
-                  setNewGameOpen(true);
-                }}
-              >
-                New Game
-              </button>
-            )}
-            {!isLivePlay && (
-              <button
-                onClick={() => {
-                  if (!isGameEnded && fullHistory.length > 0) {
-                    if (!window.confirm('Replace the current game with an imported one?')) {
-                      return;
-                    }
-                  }
-                  setLichessOpen(true);
-                }}
-                title="Import a game from Lichess"
-              >
-                Lichess
-              </button>
-            )}
-            {isLivePlay && (
-              <button
-                onClick={onUndo}
-                disabled={
-                  settings.gameMode !== 'computer' ||
-                  fullHistory.length === 0 ||
-                  animatingMove !== null ||
-                  isGameEnded
-                }
-                title={
-                  settings.gameMode === 'computer'
-                    ? 'Undo last move'
-                    : 'Undo only available vs Computer'
-                }
-              >
-                Undo
-              </button>
-            )}
-            <button onClick={onFlip}>Flip</button>
-            <button
-              onClick={() => setBoardFullscreen((v) => !v)}
-              title={boardFullscreen ? 'Exit fullscreen' : 'Expand board to fullscreen'}
-              aria-label="Toggle board fullscreen"
-            >
-              {boardFullscreen ? '⤡ Exit' : '⤢ Fullscreen'}
-            </button>
-            <button onClick={() => setSettingsOpen(true)} aria-label="Open settings">
-              Settings
-            </button>
-          </div>
         </div>
-        {!boardFullscreen && (
-        <aside className="side-panel">
-          <div className="side-panel-spacer" aria-hidden="true" />
-          <MoveHistory
-            history={fullHistory}
-            sanMoves={moveHistorySANS}
-            currentPly={viewPly}
-            onJumpTo={onJumpTo}
-            onJumpStart={onJumpStart}
-            onJumpBack={onJumpBack}
-            onJumpForward={onJumpForward}
-            onJumpEnd={onJumpEnd}
-            classifications={moveClassifications.classifications}
-            moveTimes={moveTimes}
-            bulkProgress={
-              moveClassifications.bulkLoading
-                ? { done: moveClassifications.evaluatedPlies, total: moveClassifications.totalPlies }
-                : null
-            }
-          />
-          {showThreatsNow && attackDescriptions.length > 0 && (
-            <ThreatsPanel descriptions={attackDescriptions} />
-          )}
-        </aside>
-        )}
       </main>
       {pendingPromotion && (
         <PromotionDialog
