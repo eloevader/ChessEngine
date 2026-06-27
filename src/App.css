@@ -1,2299 +1,1064 @@
+/* ============================================================
+   Chess.com-inspired theme tokens
+   ------------------------------------------------------------
+   Pulled from the actual chess.com color system: a dark slate
+   background, a green accent, warm-green / red classification
+   colors, and surface elevations that match their design
+   system. No fonts, no resets here — just the variables the
+   rest of the app uses. ============================================================ */
 :root {
+  /* Board square colors (override at runtime via themes.ts) */
   --light-sq: #ebecd0;
   --dark-sq: #779556;
   --selected-sq: rgba(255, 235, 110, 0.55);
   --last-move-sq: rgba(255, 235, 110, 0.30);
   --check-sq: radial-gradient(circle, rgba(255, 80, 80, 0.95) 0%, rgba(255, 80, 80, 0.4) 70%);
   --legal-dot: rgba(0, 0, 0, 0.18);
-  --border-clr: #383b48;
-  --bg-panel: #22232c;
-  --bg-elev: #2c2e39;
-  --bg-app: #1a1a22;
-  --text: #e6e6ec;
-  --text-dim: #9da0ad;
-  --accent: #c084fc;
-  --accent-strong: #a855f7;
+
+  /* Surfaces (chess.com dark palette) */
+  --cc-bg-page:           #312e2b; /* page background */
+  --cc-bg-surface:        #262421; /* topbar / page-2 surfaces */
+  --cc-bg-elev-1:         #1a1a1a; /* sidebar body */
+  --cc-bg-elev-2:         #21201d; /* sidebar tabs / cards */
+  --cc-bg-elev-3:         #2b2926; /* hover / inputs */
+  --cc-bg-input:          #1f1d1b;
+  --cc-border:            #3a3633;
+  --cc-border-subtle:     #2d2a27;
+  --cc-border-strong:     #4a4541;
+
+  /* Text */
+  --cc-text:              #e6e6e6;
+  --cc-text-bright:       #ffffff;
+  --cc-text-muted:        #b1adab;
+  --cc-text-dim:          #807a76;
+  --cc-text-link:         #769b3f;
+  --cc-text-link-hover:   #9bc268;
+
+  /* Brand / accent (chess.com green) */
+  --cc-accent:            #769b3f;     /* primary green */
+  --cc-accent-hover:      #8eb052;
+  --cc-accent-strong:     #5d7a30;
+  --cc-accent-soft:       rgba(118,155,63,.15);
+
+  /* Status / classification (from chess.com) */
+  --cc-brilliant:         #1baca6;
+  --cc-great-find:        #5c8bb0;
+  --cc-best:              #769b3f;
+  --cc-excellent:         #769b3f;
+  --cc-good:              #95b776;
+  --cc-book:              #a87a3a;
+  --cc-inaccuracy:        #f7c045;
+  --cc-mistake:           #e58f2c;
+  --cc-miss:              #ff7769;
+  --cc-blunder:           #ca3430;
+  --cc-win-bg:            #769b3f;
+  --cc-draw-bg:           #807a76;
+  --cc-loss-bg:           #ca3430;
+  --cc-brilliant-bg:      #1baca6;
+
+  /* Board chrome */
+  --cc-board-bg:          #1a1a1a;
+  --cc-board-border:      #3a3633;
+  --cc-coord-light:       #ebecd0;
+  --cc-coord-dark:        #779556;
+
+  /* Animation */
   --board-anim-ms: 200ms;
   --board-img: none;
   --board-img-opacity: 0;
+  --cc-transition: 150ms cubic-bezier(.2, 0, .2, 1);
 
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
-  color: var(--text);
-  background: var(--bg-app);
+  color: var(--cc-text);
+  background: var(--cc-bg-page);
   color-scheme: dark;
   -webkit-font-smoothing: antialiased;
 }
 
 * { box-sizing: border-box; }
 
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
 body {
-  margin: 0;
-  min-height: 100vh;
-  background:
-    radial-gradient(1200px 600px at 20% 0%, rgba(168, 85, 247, 0.12), transparent 60%),
-    radial-gradient(900px 500px at 90% 100%, rgba(56, 189, 248, 0.08), transparent 60%),
-    var(--bg-app);
-  transition: background 0.4s;
+  background: var(--cc-bg-page);
+  color: var(--cc-text);
+  font-family: inherit;
+  overflow: hidden; /* chess.com never scrolls the page on desktop */
 }
 
-#root { min-height: 100vh; }
-
-.app {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 16px 20px 32px;
-}
-
-/* Review mode: dim the board slightly so the user knows they're
- * in analysis, not playing (chess.com-style). */
-.app.review-mode .board {
-  filter: brightness(0.94) saturate(0.92);
-}
-
-.app-header { text-align: center; margin-bottom: 4px; }
-.app-header h1 {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.3px;
-  background: linear-gradient(90deg, #c084fc, #38bdf8);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-.app-header h1 .beta-tag {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  background: linear-gradient(90deg, #fbbf24, #f59e0b);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  margin-left: 8px;
-  vertical-align: super;
-  opacity: 0.9;
-}
-
-/* ===== Layout =====
-   The page is FIXED — it never scrolls. The board area is centered
-   in the viewport, the side panel is a fixed-width column next to
-   it. If the viewport is too small for the side panel, the side
-   panel scrolls internally (the page itself does not). The
-   `.board-fullscreen` modifier on `.app` hides the side panel and
-   expands the board to fill the viewport. */
-html, body, #root { height: 100%; margin: 0; padding: 0; }
-body { overflow: hidden; }
-
+/* ============================================================
+   Root layout
+   ============================================================ */
 .app {
   height: 100vh;
   width: 100vw;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-.app-main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 24px;
-  align-items: start;
-  width: 100%;
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 16px 20px;
-  flex: 1 1 auto;
-  min-height: 0;
+  grid-template-rows: 56px 1fr; /* topbar + main */
+  background: var(--cc-bg-page);
   overflow: hidden;
 }
 
-/* Board area is a flex column. It centers the board in the
-   available space and the meta / status bars sit above it. The
-   area itself fills its parent (the .app-main grid cell) so the
-   board can grow to fill the available height. */
-.board-area {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-  position: relative;
-  align-self: stretch;
-  height: 100%;
-}
+.app.review-mode { /* nothing global, but the class is preserved */ }
 
-.side-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  min-width: 0;
-  height: 100%;
-  max-height: calc(100vh - 32px);
-  overflow-y: auto;
-  align-self: start;
-  padding-top: 0;
-  min-height: 0;
-}
+/* Fullscreen board: hide the sidebar, board fills the viewport.
+   The topbar stays so the user can exit. */
+.app.board-fullscreen .cc-sidebar { display: none; }
+.app.board-fullscreen .cc-board-area { grid-template-columns: 1fr; }
+.app.board-fullscreen .cc-board-frame { padding: 24px; }
+.app.board-fullscreen .cc-player-strip { max-width: min(85vh, 720px); margin: 0 auto; width: 100%; }
 
-/* On tablets, side panel goes below the board and stacks. */
-@media (max-width: 960px) {
-  .app-main {
-    grid-template-columns: 1fr;
-    max-width: 720px;
-  }
-  .board-area {
-    position: static;
-    max-width: 600px;
-    margin: 0 auto;
-    width: 100%;
-  }
-  .side-panel {
-    position: static;
-    max-height: none;
-    overflow: visible;
-  }
-  .side-panel-spacer { display: none; }
-}
-
-/* On mobile, board is full width and the side panel is a tab/toggleable drawer. */
-@media (max-width: 640px) {
-  .app-main {
-    padding: 8px 10px 24px;
-    gap: 12px;
-  }
-  .board-area {
-    max-width: 100%;
-  }
-}
-
-/* On portrait phones, the page goes full-screen so the board isn't squeezed
-   by surrounding chrome and a scrollbar never appears while dragging.
-   The header / status / arrow toolbar / controls / move list are kept
-   accessible in a small footer so the user can still play and review. */
-@media (max-width: 480px) and (orientation: portrait) {
-  html, body, #root {
-    height: 100%;
-    overflow: hidden;
-    overscroll-behavior: none;
-  }
-  body {
-    position: fixed;
-    inset: 0;
-    width: 100%;
-  }
-  .app {
-    height: 100dvh;
-    width: 100vw;
-    max-width: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    touch-action: none;
-  }
-  .app-main {
-    flex: 1 1 auto;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    grid-template-columns: 1fr;
-    gap: 6px;
-    max-width: none;
-    padding: 6px 6px 0;
-  }
-  .board-area {
-    flex: 1 1 auto;
-    min-height: 0;
-    position: static;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 4px;
-    max-width: none;
-    margin: 0;
-  }
-  /* Center the board in the available vertical space and let it grow up to
-     the available width. */
-  .board-row {
-    flex: 1 1 auto;
-    display: flex;
-    align-items: stretch;
-    justify-content: center;
-    min-height: 0;
-  }
-  .board-row > .board {
-    width: min(100%, 100vw - 24px);
-    height: auto;
-    max-height: 100%;
-    align-self: center;
-    flex: 0 1 auto;
-    aspect-ratio: 1;
-  }
-  .board-row > .board-side-col {
-    flex-direction: row;
-    width: 100%;
-    height: auto;
-  }
-  .board-row > .board-side-col > .board-side-cell {
-    flex: 0 0 auto;
-  }
-  /* Eval bar lives on the right of the board (instead of left/bottom) to
-     keep the board as large as possible. */
-  .board-row.eval-pos-left,
-  .board-row.eval-pos-right {
-    gap: 6px;
-  }
-  .eval-pos-left .eval-bar-vertical,
-  .eval-pos-right .eval-bar-vertical {
-    width: 14px;
-    min-width: 14px;
-  }
-  .app-header h1 { font-size: 16px; }
-  .app-header { margin-bottom: 0; }
-  .status-bar { font-size: 12px; padding: 4px 8px; }
-  .side-panel {
-    /* On portrait phones the side panel (move history) collapses to a
-       single scrollable strip beneath the board. */
-    position: static;
-    max-height: 30vh;
-    overflow-y: auto;
-    flex: 0 0 auto;
-    padding-bottom: 0;
-  }
-  .side-panel-spacer { display: none; }
-  .controls { flex-wrap: wrap; gap: 4px; padding: 4px 0; }
-  .controls button { padding: 6px 10px; font-size: 12px; }
-  .arrow-toolbar { padding: 4px 6px; gap: 4px; }
-  .arrow-toolbar-label { font-size: 10px; }
-  .arrow-swatch { width: 18px; height: 18px; }
-  .arrow-clear-btn { font-size: 11px; padding: 3px 6px; }
-  .arrow-hint { display: none; }
-  .clock-display { font-size: 14px; padding: 2px 6px; }
-  .game-actions { padding: 4px 0; }
-  .game-action-btn { padding: 4px 8px; font-size: 11px; }
-  .post-game-actions { padding: 4px 0; }
-}
-
-.status-bar {
-  background: var(--bg-panel);
-  border: 1px solid var(--border-clr);
-  border-radius: 10px;
-  padding: 8px 16px;
-  font-weight: 600;
-  text-align: center;
-  transition: background 0.2s, border 0.2s;
-  font-size: 14px;
-  /* Fixed height so the bar never resizes when the underlying text
-   * changes (e.g. player names, opening names). Prevents the board
-   * from shifting vertically on every move. */
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  flex-shrink: 0;
-}
-
-/* Secondary status line above the status bar. Holds player
- * names, opening name, engine status, pre-move status, etc.
- * Hidden when empty so it doesn't take up space. */
-.status-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  color: var(--text-dim);
-  min-height: 0;
-  margin: 0 0 4px 0;
-  flex-shrink: 0;
-}
-.status-meta:empty { display: none; }
-.meta-info { white-space: nowrap; }
-.meta-rating { color: var(--text-dim); font-size: 10px; }
-.status-bar[data-status='check'] {
-  color: #ff9b9b;
-  border-color: #b94a4a;
-  background: rgba(255, 80, 80, 0.10);
-}
-
-.captured-row {
-  min-height: 28px;
-  padding: 2px 8px;
-  display: flex;
-  align-items: center;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-clr);
-  border-radius: 8px;
-  font-size: 12px;
-  color: var(--text-dim);
-}
-.captured-row.empty { background: transparent; border: 1px dashed var(--border-clr); }
-.captured-line { display: flex; align-items: center; gap: 1px; flex-wrap: wrap; }
-.captured-piece {
-  width: 22px;
-  height: 22px;
-  object-fit: contain;
-  display: block;
-}
-.material-diff {
-  margin-left: 6px;
-  font-weight: 700;
-  color: var(--accent);
-  font-size: 13px;
-}
-
-.clock-display {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: var(--bg-elev);
-  border: 1px solid var(--border-clr);
-  border-radius: 8px;
-  padding: 8px 14px;
-  font-family: ui-monospace, Consolas, monospace;
-  transition: background 0.15s, border 0.15s, color 0.15s;
-}
-.clock-display.active {
-  background: var(--accent-strong);
-  border-color: var(--accent);
-  color: white;
-}
-.clock-display.clock-w.active { background: linear-gradient(90deg, #f4f4f4, #ffffff); color: #1a1a1a; border-color: #ccc; }
-.clock-display.clock-b.active { background: linear-gradient(90deg, #1a1a1a, #2a2a2a); color: #f4f4f4; border-color: #444; }
-.clock-label {
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  opacity: 0.8;
-}
-.clock-time {
-  font-size: 20px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.5px;
-}
-
-/* New Game dialog */
-.ng-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  z-index: 300;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.ng-dialog {
-  background: var(--bg-panel);
-  border: 1px solid var(--border-clr);
-  border-radius: 14px;
-  width: min(520px, 92vw);
-  max-height: 90vh;
-  overflow: auto;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-  display: flex;
-  flex-direction: column;
-}
-.ng-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-clr);
-}
-.ng-header h2 { margin: 0; font-size: 18px; }
-.ng-body {
-  padding: 16px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-.ng-section h3 {
-  margin: 0 0 10px;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  color: var(--text-dim);
-}
-.ng-seg {
+/* ============================================================
+   Top navigation bar
+   ============================================================ */
+.cc-topbar {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 0 16px;
+  background: var(--cc-bg-surface);
+  border-bottom: 1px solid var(--cc-border-subtle);
+  height: 56px;
+  z-index: 50;
+}
+.cc-topbar-left, .cc-topbar-right {
+  display: flex;
+  align-items: center;
   gap: 8px;
 }
-.ng-seg.small {
-  grid-template-columns: repeat(3, 1fr);
+.cc-topbar-right { justify-content: flex-end; }
+
+.cc-topbar-center {
+  text-align: center;
+  min-width: 0;
+  max-width: 480px;
+  margin: 0 auto;
+  overflow: hidden;
 }
-.ng-seg.three {
-  grid-template-columns: repeat(3, 1fr);
-}
-.ng-seg-btn {
+
+.cc-game-title {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  background: var(--bg-elev);
-  color: var(--text);
-  border: 1px solid var(--border-clr);
-  border-radius: 10px;
-  padding: 14px 8px;
-  cursor: pointer;
-  transition: background 0.15s, border 0.15s;
+  line-height: 1.15;
+  min-width: 0;
 }
-.ng-seg-btn:hover { background: #3a3d4a; }
-.ng-seg-btn.selected { background: rgba(168, 85, 247, 0.18); border-color: var(--accent-strong); }
-.ng-seg-label { font-size: 14px; font-weight: 600; }
-.ng-seg-hint { font-size: 11px; color: var(--text-dim); }
+.cc-game-players {
+  color: var(--cc-text);
+  font-weight: 600;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.cc-game-rating { color: var(--cc-text-muted); font-weight: 500; }
+.cc-game-vs {
+  color: var(--cc-text-dim);
+  margin: 0 6px;
+  font-weight: 400;
+}
+.cc-game-result {
+  color: var(--cc-text-muted);
+  margin-left: 8px;
+  font-weight: 500;
+}
+.cc-game-opening {
+  color: var(--cc-text-muted);
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
 
-.ng-row {
+.cc-topbar-btn,
+.cc-icon-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--cc-text);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: background var(--cc-transition), color var(--cc-transition);
+  font-family: inherit;
+}
+.cc-topbar-btn:hover,
+.cc-icon-btn:hover { background: var(--cc-bg-elev-3); }
+.cc-topbar-btn:disabled,
+.cc-icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.cc-topbar-btn.primary { background: var(--cc-accent); color: #fff; }
+.cc-topbar-btn.primary:hover { background: var(--cc-accent-hover); }
+.cc-icon-btn { padding: 6px 8px; }
+.cc-icon-btn .icon-font-chess { font-size: 18px; }
+
+/* ============================================================
+   Main content
+   ============================================================ */
+.cc-main {
+  overflow: hidden;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.cc-board-area {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 0;
+  overflow: hidden;
+}
+@media (max-width: 960px) {
+  .cc-board-area { grid-template-columns: 1fr; }
+  .cc-sidebar { max-height: 40vh; }
+}
+
+/* ============================================================
+   Board column
+   ============================================================ */
+.cc-board-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+  background: var(--cc-bg-page);
+  overflow: hidden;
+  position: relative;
+}
+
+/* Player strip — sits above / below the board, full width of the
+   board (chess.com pattern: clock on the inside, name + captures
+   on the outside, both left-aligned on the bottom and right-aligned
+   on the top in white-perspective, mirrored when flipped). */
+.cc-player-strip {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 10px;
-  flex-wrap: wrap;
-}
-.ng-row > label { flex: 0 0 120px; color: var(--text-dim); font-size: 14px; }
-.ng-row input[type="number"] {
-  flex: 1;
-  max-width: 120px;
-  background: var(--bg-elev);
-  color: var(--text);
-  border: 1px solid var(--border-clr);
-  border-radius: 6px;
-  padding: 6px 10px;
-  font-size: 14px;
-  font-family: ui-monospace, Consolas, monospace;
-}
-
-.ng-level-row {
-  display: flex;
-  gap: 4px;
-  flex: 1;
-}
-.ng-level-btn {
-  flex: 1 1 0;
-  min-width: 32px;
-  background: var(--bg-elev);
-  color: var(--text);
-  border: 1px solid var(--border-clr);
-  border-radius: 6px;
-  padding: 6px 8px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 600;
-  transition: background 0.15s, border 0.15s;
-}
-.ng-level-btn:hover { background: #3a3d4a; }
-.ng-level-btn.selected { background: var(--accent-strong); color: white; border-color: var(--accent-strong); }
-
-.ng-thinktime-row {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 6px;
   width: 100%;
-}
-.ng-thinktime-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
-  padding: 6px 4px;
-  background: var(--bg-elev);
-  border: 1px solid var(--border-clr);
-  border-radius: 6px;
-  color: var(--text);
-  cursor: pointer;
-  font-family: inherit;
-  min-width: 0;
-}
-.ng-thinktime-btn:hover { background: #3a3d4a; }
-.ng-thinktime-btn.selected { background: var(--accent-strong); color: white; border-color: var(--accent-strong); }
-.ng-thinktime-label { font-size: 12px; font-weight: 600; }
-.ng-thinktime-hint { font-size: 9px; color: var(--text-dim); }
-.ng-thinktime-btn.selected .ng-thinktime-hint { color: rgba(255, 255, 255, 0.85); }
-
-.ng-preset-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
-}
-.ng-preset {
-  background: var(--bg-elev);
-  color: var(--text);
-  border: 1px solid var(--border-clr);
-  border-radius: 8px;
-  padding: 10px 6px;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  transition: background 0.15s, border 0.15s;
-}
-.ng-preset:hover { background: #3a3d4a; }
-.ng-preset.selected {
-  background: rgba(168, 85, 247, 0.18);
-  border-color: var(--accent-strong);
-  color: var(--accent);
-}
-
-.ng-custom {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 10px;
-  padding: 12px;
-  background: var(--bg-elev);
-  border-radius: 8px;
-  border: 1px solid var(--border-clr);
-}
-
-.ng-summary {
-  margin-top: 10px;
-  padding: 8px 12px;
-  background: rgba(168, 85, 247, 0.10);
-  border: 1px solid var(--accent-strong);
-  border-radius: 6px;
-  font-size: 13px;
-  color: var(--text);
-  font-weight: 500;
-  font-family: ui-monospace, Consolas, monospace;
-}
-
-.ng-footer {
-  border-top: 1px solid var(--border-clr);
-  padding: 12px 20px;
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.board-frame {
-  display: block;
-  background: var(--bg-panel);
-  padding: 0;
-  border-radius: 12px;
-  border: 1px solid var(--border-clr);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
-  transition: background 0.3s, border 0.3s;
-}
-
-/* The 3x3 coord box that always wraps the board with 4 equal-thickness edges. */
-.coord-box {
-  display: grid;
-  grid-template-columns: var(--coord-gutter, 28px) 1fr var(--coord-gutter, 28px);
-  grid-template-rows: var(--coord-gutter, 28px) 1fr var(--coord-gutter, 28px);
-  background: var(--bg-panel);
-  border-radius: 12px;
-  padding: 0;
-  gap: 0;
-}
-.coord-corner {
-  background: var(--bg-panel);
-  width: var(--coord-gutter, 28px);
-  height: var(--coord-gutter, 28px);
-}
-.coord-edge {
-  background: var(--bg-panel);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-.coord-top    { grid-column: 2; grid-row: 1; border-bottom: 1px solid var(--border-clr); }
-.coord-bottom { grid-column: 2; grid-row: 3; border-top: 1px solid var(--border-clr); }
-.coord-left   { grid-column: 1; grid-row: 2; border-right: 1px solid var(--border-clr); }
-.coord-right  { grid-column: 3; grid-row: 2; border-left: 1px solid var(--border-clr); }
-.coord-corner-tl { grid-column: 1; grid-row: 1; border-right: 1px solid var(--border-clr); border-bottom: 1px solid var(--border-clr); }
-.coord-corner-tr { grid-column: 3; grid-row: 1; border-left: 1px solid var(--border-clr); border-bottom: 1px solid var(--border-clr); }
-.coord-corner-bl { grid-column: 1; grid-row: 3; border-right: 1px solid var(--border-clr); border-top: 1px solid var(--border-clr); }
-.coord-corner-br { grid-column: 3; grid-row: 3; border-left: 1px solid var(--border-clr); border-top: 1px solid var(--border-clr); }
-.board { grid-column: 2; grid-row: 2; }
-
-.ranks-col {
-  display: grid;
-  grid-template-rows: repeat(8, 1fr);
-  font-size: 11px;
-  color: var(--text-dim);
-  width: 100%;
-  height: 100%;
-}
-.rank-coord {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 500;
-  user-select: none;
-}
-.files-row {
-  display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  width: 100%;
-  height: 100%;
-  align-items: center;
-  font-size: 11px;
-  color: var(--text-dim);
-  font-weight: 500;
-  user-select: none;
-}
-.file-coord {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.board {
-  display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  grid-template-rows: repeat(8, 1fr);
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  border-radius: 6px;
-  overflow: hidden;
-  user-select: none;
-  position: relative;
-  touch-action: none;
-}
-
-.board::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: var(--board-img);
-  background-size: 200% 200%;
-  opacity: var(--board-img-opacity);
-  pointer-events: none;
-  mix-blend-mode: multiply;
-  z-index: 0;
-}
-
-.board::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: var(--board-img);
-  background-size: 200% 200%;
-  opacity: calc(var(--board-img-opacity) * 0.4);
-  pointer-events: none;
-  mix-blend-mode: screen;
-  z-index: 0;
-}
-
-.square {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  cursor: pointer;
-  font-size: clamp(28px, 7.2vw, 64px);
-  line-height: 1;
-  transition: background 0.2s;
-  z-index: 1;
-}
-.square.light { background: var(--light-sq); }
-.square.dark { background: var(--dark-sq); }
-.square.last-move.light { background: var(--last-move-light); }
-.square.last-move.dark { background: var(--last-move-dark); }
-.square.in-check.light,
-.square.in-check.dark { background: var(--check-sq) !important; }
-
-/* Pre-move highlight (vs-Computer mode only). Lichess / chess.com
- * style: the FROM square is tinted teal/blue, the TO square is
- * tinted a slightly brighter teal/blue, so the user can clearly
- * see what move they have queued. */
-.square.pre-move-from {
-  background-color: rgba(85, 152, 222, 0.35) !important;
-  position: relative;
-}
-.square.pre-move-to {
-  background-color: rgba(85, 152, 222, 0.55) !important;
-  position: relative;
-}
-.square.pre-move-from::after,
-.square.pre-move-to::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border: 3px solid rgba(85, 152, 222, 0.95);
-  border-radius: 0;
-  pointer-events: none;
-}
-
-.piece {
-  width: 100%;
-  height: 100%;
-  display: block;
-  cursor: grab;
-  pointer-events: auto;
-  transition: transform 0.1s ease, filter 0.15s ease;
-  z-index: 2;
-  user-select: none;
-  -webkit-user-drag: element;
-  touch-action: manipulation;
-}
-.piece:active { cursor: grabbing; }
-.piece.selected {
-  transform: scale(1.08);
-  filter: drop-shadow(0 0 6px var(--accent)) drop-shadow(0 0 12px rgba(192, 132, 252, 0.5));
-}
-
-/* Ghost piece that follows the finger during a touch drag. */
-.touch-ghost {
-  position: absolute;
-  pointer-events: none;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.4));
-  opacity: 0.9;
-}
-.touch-ghost img {
-  width: 100%;
-  height: 100%;
-  display: block;
-  user-select: none;
-  -webkit-user-drag: none;
-}
-
-.legal-hint {
-  position: absolute;
-  width: 36%;
-  height: 36%;
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: 3;
-}
-.legal-hint.quiet { background: var(--legal-dot); }
-.legal-hint.capture {
-  background: transparent;
-  border: 5px solid currentColor;
-  width: 88%;
-  height: 88%;
+  max-width: min(85vh, 720px);
+  padding: 4px 8px;
+  min-height: 48px;
   box-sizing: border-box;
 }
+.cc-player-strip.top { flex-direction: row-reverse; }
+.cc-player-strip.bottom { flex-direction: row; }
 
-/* Arrow toolbar (right-click-drag arrow drawing) */
-.arrow-toolbar {
+.cc-player-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  background: var(--cc-bg-elev-2);
+  border-radius: 6px;
+  padding: 6px 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid var(--cc-border-subtle);
+}
+.cc-player-strip.top .cc-player-name { flex-direction: row-reverse; }
+.cc-player-username {
+  color: var(--cc-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.cc-player-rating { color: var(--cc-text-muted); font-weight: 500; }
+
+/* Board frame: the dark slate surround that chess.com uses to
+   visually separate the board from the page. */
+.cc-board-frame {
+  background: var(--cc-board-bg);
+  border-radius: 6px;
+  padding: 12px;
+  box-shadow: 0 0 0 1px var(--cc-board-border), 0 8px 24px rgba(0,0,0,.45);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  max-width: 100%;
+}
+.cc-board-wrap {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  max-width: 100%;
+}
+.cc-eval-bar-wrap {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  min-width: 24px;
+  max-width: 28px;
+}
+
+/* Status pill: the "White to move" / "Checkmate" bar at the
+   bottom of the board column. */
+.cc-status-pill {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--cc-text-muted);
+  font-weight: 500;
+  text-align: center;
+  min-height: 20px;
+  line-height: 20px;
+}
+.cc-status-pill.check {
+  color: var(--cc-loss-bg);
+  font-weight: 700;
+}
+
+/* ============================================================
+   Right sidebar (move list, analysis, move times)
+   ============================================================ */
+.cc-sidebar {
+  display: flex;
+  flex-direction: column;
+  background: var(--cc-bg-elev-1);
+  border-left: 1px solid var(--cc-border-subtle);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.cc-sidebar-tabs {
+  display: flex;
+  background: var(--cc-bg-elev-2);
+  border-bottom: 1px solid var(--cc-border-subtle);
+  flex-shrink: 0;
+}
+.cc-tab {
+  flex: 1 1 0;
+  background: transparent;
+  border: 0;
+  color: var(--cc-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 14px 12px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color var(--cc-transition), border-color var(--cc-transition), background var(--cc-transition);
+  font-family: inherit;
+}
+.cc-tab:hover { color: var(--cc-text); background: rgba(255,255,255,.03); }
+.cc-tab.active {
+  color: var(--cc-text-bright);
+  border-bottom-color: var(--cc-accent);
+  background: var(--cc-bg-elev-1);
+}
+
+.cc-sidebar-section {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Move list nav buttons (chess.com has these as small icons
+   above the move list). */
+.cc-moves-nav {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--cc-border-subtle);
+}
+.cc-nav-btn {
+  background: var(--cc-bg-elev-2);
+  border: 1px solid var(--cc-border-subtle);
+  color: var(--cc-text);
+  border-radius: 4px;
+  width: 32px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--cc-transition), border-color var(--cc-transition);
+}
+.cc-nav-btn:hover:not(:disabled) { background: var(--cc-bg-elev-3); border-color: var(--cc-border-strong); }
+.cc-nav-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Analysis tab */
+.cc-analysis { padding: 16px; }
+.cc-engine-status {
+  color: var(--cc-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--cc-border-subtle);
+}
+.cc-engine-line { display: flex; flex-direction: column; gap: 4px; }
+.cc-engine-line-label {
+  color: var(--cc-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.cc-engine-line-pv {
+  color: var(--cc-text);
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  font-size: 13px;
+  background: var(--cc-bg-elev-2);
+  border-radius: 4px;
+  padding: 8px 10px;
+  word-break: break-all;
+  border: 1px solid var(--cc-border-subtle);
+}
+
+/* Move times tab */
+.cc-time-list { display: flex; flex-direction: column; gap: 2px; }
+.cc-time-row {
+  display: flex;
+  justify-content: space-between;
   padding: 6px 10px;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 8px;
-  margin: 6px auto 0 auto;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--cc-text);
+}
+.cc-time-row:hover { background: var(--cc-bg-elev-2); }
+.cc-time-row.current {
+  background: var(--cc-accent-soft);
+  color: var(--cc-text-bright);
+  font-weight: 700;
+}
+.cc-time-ply { color: var(--cc-text-muted); font-weight: 600; min-width: 36px; }
+.cc-time-seps { color: var(--cc-text-muted); }
+.cc-time-secs { font-variant-numeric: tabular-nums; }
+.cc-empty {
+  color: var(--cc-text-muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 24px 12px;
+}
+
+/* ============================================================
+   Sidebar footer: arrows, game actions, status banners
+   ============================================================ */
+.cc-sidebar-footer {
+  border-top: 1px solid var(--cc-border-subtle);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--cc-bg-elev-2);
+  flex-shrink: 0;
+}
+
+.cc-arrow-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   flex-wrap: wrap;
 }
-.arrow-toolbar-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-muted);
+.cc-arrow-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--cc-text-dim);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  margin-right: 4px;
 }
-.arrow-swatch {
-  width: 22px;
-  height: 22px;
+.cc-arrow-swatch {
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   border: 2px solid transparent;
   cursor: pointer;
+  transition: border-color var(--cc-transition), transform var(--cc-transition);
+  background: transparent;
   padding: 0;
-  transition: transform 0.1s ease, border-color 0.1s ease;
-  outline: none;
 }
-.arrow-swatch:hover { transform: scale(1.1); }
-.arrow-swatch.selected {
-  border-color: var(--text, #fff);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
-}
-.arrow-swatch-green { background: rgb(157, 196, 85); }
-.arrow-swatch-red   { background: rgb(222, 80, 80); }
-.arrow-swatch-yellow { background: rgb(234, 204, 65); }
-.arrow-swatch-blue  { background: rgb(85, 152, 222); }
-.arrow-clear-btn {
-  padding: 4px 10px;
-  font-size: 12px;
-  border: 1px solid var(--panel-border);
-  background: var(--button-bg);
-  color: var(--text);
-  border-radius: 6px;
-  cursor: pointer;
-}
-.arrow-clear-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.arrow-hint {
+.cc-arrow-swatch.selected { border-color: var(--cc-text-bright); transform: scale(1.1); }
+.cc-arrow-green  { background: #769b3f; }
+.cc-arrow-red    { background: #ca3430; }
+.cc-arrow-yellow { background: #f7c045; }
+.cc-arrow-blue   { background: #5b9bd5; }
+.cc-arrow-clear {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--cc-border-subtle);
+  color: var(--cc-text-muted);
   font-size: 11px;
-  color: var(--text-muted);
-  margin-left: 4px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
 }
+.cc-arrow-clear:hover:not(:disabled) { color: var(--cc-text); border-color: var(--cc-border-strong); }
+.cc-arrow-clear:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* Live threats panel — sits inside the side panel under the
-   move list. Shows "who is attacking whom" descriptions. Hidden
-   when there are no threats, so it doesn't take up space. */
-.threats-panel {
-  background: var(--bg-elev);
-  border: 1px solid var(--border-clr);
-  border-radius: 8px;
-  padding: 8px 10px;
-  margin: 8px 0 0 0;
+.cc-game-actions { display: flex; gap: 8px; }
+.cc-action-btn,
+.cc-review-btn {
+  background: var(--cc-bg-elev-3);
+  border: 1px solid var(--cc-border);
+  color: var(--cc-text);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  flex: 1 1 auto;
+  justify-content: center;
+  font-family: inherit;
+  transition: background var(--cc-transition), border-color var(--cc-transition);
+}
+.cc-action-btn:hover,
+.cc-review-btn:hover { background: var(--cc-border); border-color: var(--cc-border-strong); }
+.cc-review-btn {
+  background: var(--cc-accent);
+  color: #fff;
+  border-color: var(--cc-accent);
+}
+.cc-review-btn:hover { background: var(--cc-accent-hover); }
+.cc-action-icon { font-size: 14px; }
+
+.cc-premove-banner {
+  background: var(--cc-bg-elev-3);
+  color: var(--cc-text);
+  border: 1px solid var(--cc-border);
+  border-radius: 6px;
+  padding: 6px 10px;
   font-size: 12px;
   line-height: 1.4;
-  max-height: 30vh;
-  overflow-y: auto;
-  flex-shrink: 0;
 }
-.threats-header {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-dim);
-  margin-bottom: 6px;
+.cc-premove-banner.cc-status-error {
+  border-color: var(--cc-loss-bg);
+  color: var(--cc-loss-bg);
+  background: rgba(202, 52, 48, 0.12);
 }
-.threats-list {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.threat-line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 5px;
-  font-size: 12px;
-}
-.threat-side {
-  display: inline-block;
-  min-width: 16px;
-  text-align: center;
-  font-weight: 700;
-  font-size: 10px;
-  padding: 1px 4px;
-  border-radius: 3px;
-}
-.threat-side-w { background: rgba(255, 255, 255, 0.85); color: #222; }
-.threat-side-b { background: rgba(40, 40, 40, 0.85); color: #f4f4f4; }
-.threat-target { color: var(--text-dim); font-weight: 700; }
-.threat-piece { font-weight: 600; }
-.threat-square {
-  font-family: ui-monospace, Consolas, monospace;
-  color: var(--text-dim);
-  font-size: 11px;
-}
-.threat-arrow { color: var(--accent); font-weight: 700; }
 
+/* ============================================================
+   Responsive: stack the sidebar below the board
+   ============================================================ */
+@media (max-width: 960px) {
+  .cc-board-area { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
+  .cc-sidebar { border-left: 0; border-top: 1px solid var(--cc-border-subtle); max-height: 45vh; }
+  .cc-board-column { padding: 8px; }
+}
+@media (max-width: 640px) {
+  .cc-topbar { grid-template-columns: 1fr 2fr 1fr; padding: 0 8px; }
+  .cc-game-players { font-size: 12px; }
+  .cc-game-opening { display: none; }
+  .cc-topbar-btn { padding: 4px 8px; font-size: 12px; }
+}
+
+/* ============================================================
+   Board component (Board.tsx)
+   ------------------------------------------------------------
+   The outer frame, coordinate edges, and the 8×8 board grid.
+   ============================================================ */
+.board-frame { position: relative; display: inline-block; }
+
+.coord-box {
+  display: grid;
+  grid-template-columns: 20px 1fr 20px;
+  grid-template-rows: 20px 1fr 20px;
+  grid-template-areas:
+    "corner-tl  top    corner-tr"
+    "left       board  right"
+    "corner-bl  bottom corner-br";
+  align-items: stretch;
+}
+.coord-corner { background: var(--cc-bg-page); }
+.coord-edge { display: flex; align-items: center; justify-content: center; }
+.coord-top    { grid-area: top;    flex-direction: row; }
+.coord-left   { grid-area: left;  flex-direction: column; }
+.coord-right  { grid-area: right; flex-direction: column; }
+.coord-bottom { grid-area: bottom; flex-direction: row; }
+
+.files-row { display: flex; gap: 0; }
+.ranks-col { display: flex; flex-direction: column; gap: 0; }
+
+.coord {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  user-select: none;
+}
+.file-coord, .rank-coord {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.coord-box .file-coord { width: 12.5%; min-height: 18px; }
+.coord-box .rank-coord { height: 12.5%; min-width: 18px; }
+.coord.file-coord { color: var(--cc-coord-dark); }
+.coord.rank-coord { color: var(--cc-coord-dark); }
+
+.board {
+  grid-area: board;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+/* ============================================================
+   BoardSquare component (BoardSquare.tsx)
+   ============================================================ */
+.square {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.square.light { background-color: var(--light-sq); }
+.square.dark  { background-color: var(--dark-sq); }
+.square.last-move {
+  background-color: var(--last-move-sq);
+  /* chess.com also uses a subtle outline on the to-square. */
+}
+.square.last-move:not(.light):not(.dark) {
+  /* fallback: chess.com paints a yellow-ish rectangle on top. We just
+     use the background-blend approach via the variable above. */
+}
+.square.in-check {
+  background: var(--check-sq);
+}
+.square.pre-move-from { background: rgba(0, 0, 0, .16); }
+.square.pre-move-to   { background: rgba(0, 0, 0, .16); }
+
+.piece {
+  width: 88%;
+  height: 88%;
+  object-fit: contain;
+  pointer-events: none;
+  position: relative;
+  z-index: 2;
+  transition: none; /* animation is handled via JS + CSS @keyframes */
+}
+.piece.selected {
+  filter: drop-shadow(0 0 4px rgba(0,0,0,.6));
+}
+
+/* Coordinates drawn inside the cell */
 .coord-incell {
   position: absolute;
   font-size: 10px;
   font-weight: 700;
-  pointer-events: none;
-  z-index: 2;
   line-height: 1;
-  letter-spacing: 0;
-  text-transform: none;
+  pointer-events: none;
+  z-index: 3;
 }
-.coord-incell.tl {
-  top: 2px;
-  left: 3px;
-}
-.coord-incell.br {
-  bottom: 2px;
-  right: 3px;
-  font-size: 9px;
-  opacity: 0.6;
-}
+.coord-incell.tl { top: 1px; left: 2px; }
+.coord-incell.br { bottom: 1px; right: 2px; }
+.coord-incell.on-light { color: var(--cc-coord-dark); }
+.coord-incell.on-dark  { color: var(--cc-coord-light); }
 
-/* Move notation overlay on the board (chess.com-style). Shown on
- * the source and destination squares of the most recent move. */
+/* "last-move" text label displayed on the board */
 .move-on-board {
   position: absolute;
-  bottom: 2px;
-  right: 3px;
-  font-size: 10px;
-  font-weight: 700;
-  font-family: ui-monospace, Consolas, monospace;
-  pointer-events: none;
-  z-index: 4;
-  line-height: 1;
-  letter-spacing: -0.3px;
-  text-shadow: 0 0 2px rgba(0, 0, 0, 0.85);
-}
-.move-on-board.on-light { color: #444; text-shadow: 0 0 2px rgba(255, 255, 255, 0.6); }
-.move-on-board.on-dark { color: #f4e4a1; }
-
-/* Lichess import dialog */
-.lichess-dialog {
-  width: min(560px, 92vw);
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-}
-.lichess-input-row {
-  display: flex;
-  gap: 8px;
-  margin: 12px 0;
-}
-.lichess-username {
-  flex: 1;
-  background: var(--bg-app);
-  color: var(--text);
-  border: 1px solid var(--border-clr);
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 14px;
-  font-family: inherit;
-}
-.lichess-username:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-.lichess-error {
-  color: #e74c3c;
   font-size: 13px;
-  margin: 8px 0;
-}
-.lichess-games {
-  margin-top: 8px;
-  border-top: 1px solid var(--border-clr);
-  padding-top: 8px;
-  overflow-y: auto;
-  flex: 1;
-}
-.lichess-games-header {
-  font-size: 12px;
-  color: var(--text-dim);
-  margin-bottom: 6px;
-}
-.lichess-games-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.lichess-game-row {
-  text-align: left;
-  background: var(--bg-elev);
-  color: var(--text);
-  border: 1px solid var(--border-clr);
-  border-radius: 8px;
-  padding: 8px 12px;
-  cursor: pointer;
-  font-family: inherit;
-}
-.lichess-game-row:hover {
-  border-color: var(--accent);
-  background: rgba(192, 132, 252, 0.08);
-}
-.lichess-game-line1 {
-  display: flex;
-  justify-content: space-between;
-  font-size: 14px;
-  font-weight: 600;
-  margin-bottom: 2px;
-}
-.lichess-rating {
-  color: var(--text-dim);
-  font-weight: 400;
-  font-size: 12px;
-}
-.lichess-game-line2 {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  color: var(--text-dim);
-}
-.lichess-result {
-  font-family: ui-monospace, Consolas, monospace;
-  padding: 0 6px;
-  border-radius: 4px;
-  font-size: 12px;
   font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+  z-index: 3;
+  top: 2px;
+  left: 2px;
+  opacity: 0.85;
 }
-.lichess-1-0 { background: #f0f0f0; color: #333; }
-.lichess-0-1 { background: #303030; color: #f0f0f0; }
-.lichess-1-2-1-2, .lichess-1-1-2 { background: #555; color: white; }
-.lichess-star { background: transparent; color: var(--text-dim); }
-.lichess-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-clr);
-}
-.lichess-info {
-  color: var(--text-dim);
-  font-size: 12px;
-  margin-left: 6px;
-}
-.lichess-info::before { content: ''; }
+.move-on-board.on-light { color: var(--cc-coord-dark); }
+.move-on-board.on-dark  { color: var(--cc-coord-light); }
 
-/* On-board move annotation (chess.com-style). The icon is shown
- * at the top-right of the destination square of the currently-
- *  viewed move, exactly where chess.com puts it. */
+/* Annotation icon (e.g. brilliant, blunder badge) */
 .move-annotation {
   position: absolute;
   top: -4px;
   right: -4px;
-  pointer-events: none;
-  z-index: 6;
-  line-height: 0;
-  /* Strong outer ring + inner shadow gives the icon weight on
-   * both light and dark squares. */
-  filter:
-    drop-shadow(0 0 1px rgba(0, 0, 0, 0.95))
-    drop-shadow(0 0 2px rgba(0, 0, 0, 0.85))
-    drop-shadow(0 0 4px rgba(0, 0, 0, 0.6));
-  transform: scale(1.15);
-  transform-origin: top right;
-}
-.coord-incell.on-light {
-  color: rgba(0, 0, 0, 0.55);
-  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5);
-}
-.coord-incell.on-dark {
-  color: rgba(255, 255, 255, 0.65);
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.6);
-}
-/* When all-cells mode, place single label bottom-right faded */
-.square .coord-incell.br:only-child {
-  bottom: 2px;
-  right: 3px;
-  font-size: 9px;
-  opacity: 0.45;
-  font-weight: 600;
-}
-
-.animated-piece {
+  z-index: 3;
   pointer-events: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 12.5%;
-  height: 12.5%;
-  text-shadow: 0 2px 4px rgba(0,0,0,0.35);
-  z-index: 5;
+  width: 30px;
+  height: 30px;
 }
 
-@keyframes piece-slide {
-  from { transform: translate(0, 0); }
-  to   { transform: translate(var(--dx, 0px), var(--dy, 0px)); }
+/* Legal-move hints */
+.legal-hint { position: absolute; z-index: 3; pointer-events: none; }
+.legal-hint.quiet {
+  width: 28%;
+  height: 28%;
+  border-radius: 50%;
+  background: var(--legal-dot);
+}
+.legal-hint.capture {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 5px solid currentColor;
+  box-sizing: border-box;
 }
 
-@keyframes piece-arc {
-  0%   { transform: translate(0, 0); }
-  50%  { transform: translate(calc(var(--dx, 0px) / 2), calc(var(--dy, 0px) / 2 - var(--arc-lift, 24px))); }
-  100% { transform: translate(var(--dx, 0px), var(--dy, 0px)); }
+/* Touch ghost (dragged piece on touch devices) */
+.touch-ghost {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.85;
 }
+.touch-ghost img { width: 100%; height: 100%; object-fit: contain; }
 
-.files-inner {
-  display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  font-size: 11px;
-  color: var(--text-dim);
-  font-weight: 500;
-  user-select: none;
-}
-.file-coord { text-align: center; }
-
-.post-game-actions {
-  display: flex;
-  justify-content: center;
-  padding: 8px 0 0;
-  gap: 8px;
-}
-.post-game-actions .primary-action,
-.post-game-actions button {
-  background: var(--accent-strong);
-  color: white;
-  border: 1px solid var(--accent-strong);
-  padding: 10px 24px;
-  border-radius: 8px;
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.post-game-actions button:not(.primary-action) {
-  background: var(--bg-elev);
-  color: var(--text);
-  border-color: var(--border-clr);
-}
-.post-game-actions button:hover { filter: brightness(1.1); }
-
-/* Game actions (Draw/Resign) — shown only in play modes, above main controls */
-.game-actions {
+/* ============================================================
+   ClockDisplay component
+   ============================================================ */
+.clock-display {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 6px 0;
-  flex-wrap: wrap;
-}
-.game-action-btn {
-  font-size: 13px;
-  padding: 6px 12px;
+  gap: 6px;
+  background: var(--cc-bg-elev-2);
+  border: 1px solid var(--cc-border-subtle);
   border-radius: 6px;
-  border: 1px solid var(--border-clr);
-  background: var(--bg-elev);
-  color: var(--text);
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.game-action-btn:hover { background: #3a3d4a; }
-.game-action-btn.primary-action {
-  background: var(--accent-strong);
-  color: white;
-  border-color: var(--accent-strong);
-}
-.game-action-btn.danger-action {
-  background: transparent;
-  color: #ff7a7a;
-  border-color: #5a2a2a;
-}
-.game-action-btn.danger-action:hover { background: rgba(255, 80, 80, 0.1); }
-.draw-offer-label {
-  font-size: 12px;
-  color: var(--text-dim);
-  font-style: italic;
-}
-
-.controls {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-.controls button {
-  background: var(--bg-elev);
-  color: var(--text);
-  border: 1px solid var(--border-clr);
-  padding: 8px 14px;
-  border-radius: 8px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: background 0.15s, transform 0.05s;
-}
-.controls button:hover:not(:disabled) { background: #3a3d4a; }
-.controls button:active:not(:disabled) { transform: translateY(1px); }
-.controls button:disabled { opacity: 0.5; cursor: not-allowed; }
-.controls button.primary-action {
-  background: var(--accent-strong);
-  color: white;
-  border-color: var(--accent-strong);
-}
-.controls button.primary-action:hover:not(:disabled) {
-  background: var(--accent);
-}
-.controls button.danger-action {
-  background: transparent;
-  color: #ff7a7a;
-  border-color: #5a2a2a;
-}
-.controls button.danger-action:hover:not(:disabled) {
-  background: rgba(255, 80, 80, 0.1);
-}
-
-.side-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-width: 0;
-}
-
-/* Spacer to push the Moves panel below the board's pre-content
-   (header + status + captured row + gaps + top of coord box = ~140px). */
-.side-panel-spacer {
-  height: 160px;
+  padding: 6px 12px;
+  font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
-
-.move-history {
-  background: var(--bg-panel);
-  border: 1px solid var(--border-clr);
-  border-radius: 10px;
-  padding: 10px 12px;
-  max-height: 320px;
-  overflow: auto;
-  display: flex;
-  flex-direction: column;
+.clock-display.active {
+  background: var(--cc-bg-elev-3);
+  border-color: var(--cc-accent);
 }
-.move-history-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
-  position: sticky;
-  top: 0;
-  background: var(--bg-panel);
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--border-clr);
-  z-index: 1;
-}
-.move-history h3 {
-  margin: 0;
-  font-size: 13px;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-.move-nav {
-  display: flex;
-  gap: 2px;
-}
-.nav-btn {
-  background: var(--bg-elev);
-  color: var(--text);
-  border: 1px solid var(--border-clr);
-  border-radius: 4px;
-  width: 24px;
-  height: 24px;
-  font-size: 14px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  line-height: 1;
-}
-.nav-btn:hover:not(:disabled) { background: #3a3d4a; }
-.nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.move-list { display: flex; flex-direction: column; gap: 2px; }
-.move-row {
-  display: grid;
-  grid-template-columns: 32px 1fr auto 1fr auto;
-  gap: 4px;
-  font-size: 14px;
-  align-items: center;
-}
-.move-num { color: var(--text-dim); text-align: right; padding-right: 6px; }
-.move-time {
-  color: var(--text-dim);
-  font-family: ui-monospace, Consolas, monospace;
+.clock-label {
   font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  min-width: 36px;
-  text-align: left;
-  padding-left: 2px;
+  font-weight: 600;
+  color: var(--cc-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
-.move-cell {
-  background: transparent;
-  color: var(--text);
-  border: 1px solid transparent;
-  border-radius: 6px;
-  padding: 4px 8px;
-  text-align: left;
-  cursor: pointer;
-  font-family: ui-monospace, Consolas, monospace;
-  font-size: 14px;
+.clock-time {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--cc-text-bright);
 }
-.move-cell:hover:not(:disabled) { background: var(--bg-elev); }
-.move-cell.active { background: var(--accent-strong); color: white; }
-.move-cell.past { color: var(--text-dim); }
-.move-cell:disabled { color: var(--text-dim); cursor: default; }
-.empty { color: var(--text-dim); font-size: 13px; padding: 6px 0; }
+.clock-display.active .clock-time { color: var(--cc-text-bright); }
+.clock-display.clock-b .clock-time { color: var(--cc-text-muted); }
+.clock-display.clock-b.active .clock-time { color: var(--cc-text-bright); }
 
-/* Move-classification icons (chess.com-style). The icon is rendered
- * after the SAN. No background pill — the icon is its own visual. */
-.move-cell .move-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-left: 4px;
-  vertical-align: middle;
-  line-height: 0;
-  transform: scale(1.15);
-  transform-origin: left center;
-  filter:
-    drop-shadow(0 0 1px rgba(0, 0, 0, 0.95))
-    drop-shadow(0 0 2px rgba(0, 0, 0, 0.7));
-}
-.move-cell .move-icon svg { display: block; }
-
-.promotion-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+/* ============================================================
+   CapturedPieces component
+   ============================================================ */
+.captured-row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  z-index: 100;
+  min-width: 0;
+  flex: 1 1 auto;
 }
-.promotion-dialog {
-  background: var(--bg-panel);
-  border: 1px solid var(--border-clr);
-  border-radius: 14px;
-  padding: 18px 20px;
-  min-width: 320px;
-  text-align: center;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-}
-.promotion-dialog h3 { margin: 0 0 12px; font-size: 16px; color: var(--text); }
-.promotion-choices { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-.promotion-btn {
+.captured-row.empty { visibility: hidden; }
+.captured-line {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 4px;
-  background: var(--bg-elev);
-  color: var(--text);
-  border: 1px solid var(--border-clr);
-  border-radius: 10px;
-  padding: 10px 6px;
-  cursor: pointer;
-  transition: background 0.15s, transform 0.05s;
+  gap: 2px;
+  flex-wrap: wrap;
 }
-.promotion-btn:hover { background: #3a3d4a; }
-.promotion-btn:active { transform: translateY(1px); }
-.promotion-piece {
-  width: 44px;
-  height: 44px;
+.captured-piece {
+  width: 16px;
+  height: 16px;
   object-fit: contain;
 }
-.promotion-label { font-size: 12px; color: var(--text-dim); }
-
-/* ===== Board row layout =====
-   The board row has three slots:
-     1. .board-side-col  — top player (above board) + bottom player
-        (below board) details. Each half stretches to half the
-        board's height, with the captured pieces + clock packed
-        tightly against the board edge.
-     2. .board          — the actual chess board (square, aspect 1).
-     3. eval bar (right of board) — full board-height vertical bar.
-   The whole thing is wrapped in a flex container that
-   vertically centers everything in the available viewport space. */
-.board-row {
-  display: flex;
-  align-items: stretch;
-  gap: 8px;
-  width: 100%;
-  max-width: min(72vw, 560px);
-  margin: 0 auto;
-  justify-content: center;
-  flex: 1 1 auto;
-  min-height: 0;
-}
-.board-row > .board-side-col {
-  display: flex;
-  flex-direction: column;
-  flex: 0 0 auto;
-  min-width: 0;
-  min-height: 0;
-  /* Width of the side column matches the width of the captured
-   * pieces / clock display so the layout looks balanced. */
-  width: 56px;
-  justify-content: space-between;
-  align-items: stretch;
-}
-.board-row > .board-side-col > .board-side-cell {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: stretch;
-  flex: 1 1 0;
-  min-height: 0;
-  /* Reverse the inner order for the bottom cell so the clock is
-   * next to the board (top) and captured pieces sit on the
-   * outside. */
-}
-.board-row > .board-side-col > .board-side-cell.bottom {
-  justify-content: center;
-}
-.board-row > .board {
-  flex: 0 1 auto;
-  align-self: center;
-  height: 100%;
-  aspect-ratio: 1;
-  max-height: 100%;
-  max-width: 100%;
+.material-diff {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--cc-accent);
+  margin-left: 2px;
 }
 
+/* ============================================================
+   EvalBar component
+   ============================================================ */
 .eval-bar {
-  background: #1a1a1a;
-  border-radius: 4px;
-  overflow: hidden;
-  user-select: none;
   position: relative;
-  border: 1px solid var(--border-clr);
-}
-
-/* The eval bar's layout slot is always rendered (so the board never
- * shifts between moves), but we hide the bar itself when the engine
- * isn't thinking. `visibility: hidden` + `pointer-events: none`
- * preserves the slot's space. */
-.eval-slot {
   display: flex;
-  align-items: stretch;
-  justify-content: stretch;
-}
-.eval-slot-hidden .eval-bar {
-  visibility: hidden;
-  pointer-events: none;
+  border-radius: 3px;
+  overflow: hidden;
+  min-height: 0;
+  min-width: 0;
 }
 .eval-bar-vertical {
-  width: 18px;
-  min-width: 18px;
-  height: 100%;
-  align-self: stretch;
-  display: flex;
   flex-direction: column;
-  border-radius: 4px;
-  overflow: hidden;
-}
-.eval-bar-horizontal {
-  height: 24px;
   width: 100%;
-  max-width: min(72vw, 560px);
-  margin: 0 auto;
-  display: flex;
-  flex-direction: row;
+  height: 100%;
+  min-width: 20px;
 }
 .eval-bar-black {
-  background: #1a1a1a;
+  width: 100%;
+  background: #111;
   position: relative;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 6px;
+  transition: height var(--cc-transition);
 }
 .eval-bar-white {
-  background: #f4f4f4;
-}
-.eval-bar-black-h {
-  background: #1a1a1a;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  padding-left: 6px;
-}
-.eval-bar-white-h {
-  background: #f4f4f4;
-  height: 100%;
+  width: 100%;
+  background: #ddd;
+  transition: height var(--cc-transition);
 }
 .eval-label {
   font-size: 11px;
   font-weight: 700;
-  font-family: ui-monospace, Consolas, monospace;
+  color: var(--cc-text);
+  line-height: 1;
   pointer-events: none;
   white-space: nowrap;
 }
-.eval-label-bottom { color: #f4f4f4; }
-.eval-label-inline { color: #f4f4f4; font-size: 12px; }
-
-/* Pulsing "thinking" indicator shown while the engine hasn't reported a
-   score yet. */
+.eval-label-bottom {
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.eval-bar-loading .eval-bar-black,
+.eval-bar-loading .eval-bar-white {
+  background: repeating-linear-gradient(
+    45deg,
+    #444,
+    #444 4px,
+    #555 4px,
+    #555 8px
+  );
+}
+/* Thinking dots overlay */
 .eval-bar-think {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 2px;
   pointer-events: none;
+  z-index: 2;
 }
 .eval-bar-think .dot {
-  width: 5px;
-  height: 5px;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
-  background: rgba(244, 244, 244, 0.85);
-  animation: eval-think-pulse 1.2s ease-in-out infinite;
+  background: var(--cc-text);
+  animation: eval-blink 1.4s ease-in-out infinite both;
 }
+.eval-bar-think .dot:nth-child(1) { animation-delay: 0s; }
 .eval-bar-think .dot:nth-child(2) { animation-delay: 0.2s; }
 .eval-bar-think .dot:nth-child(3) { animation-delay: 0.4s; }
-@keyframes eval-think-pulse {
-  0%, 100% { opacity: 0.3; transform: scale(0.8); }
-  50%      { opacity: 1;   transform: scale(1.2); }
+@keyframes eval-blink {
+  0%, 80%, 100% { opacity: .25; }
+  40% { opacity: .85; }
 }
-
-/* M (mate) badge so users immediately see a forced mate is in progress. */
+/* Mate badge */
 .eval-bar-mate-badge {
   position: absolute;
-  top: 4px;
   left: 50%;
+  top: 4px;
   transform: translateX(-50%);
   font-size: 9px;
-  font-weight: 700;
-  color: #fbbf24;
-  pointer-events: none;
-  text-shadow: 0 0 2px rgba(0,0,0,0.6);
+  font-weight: 800;
+  color: #fff;
+  background: var(--cc-loss-bg);
+  padding: 1px 3px;
+  border-radius: 2px;
+  z-index: 3;
+  line-height: 1;
 }
 
-.eval-pos-left,
-.eval-pos-right { align-self: stretch; }
-.eval-pos-top,
-.eval-pos-bottom { align-self: center; width: 100%; max-width: min(72vw, 560px); }
-
-.dirty-badge {
-  background: var(--accent-strong);
-  color: white;
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-weight: 600;
-  margin-right: auto;
-  margin-left: 8px;
-}
-
-.settings-savebar {
-  position: sticky;
-  bottom: 0;
-  background: var(--bg-panel);
-  border-top: 1px solid var(--border-clr);
-  padding: 12px 20px;
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-.primary-btn {
-  background: var(--accent-strong);
-  color: white;
-  border: none;
-  padding: 8px 18px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 600;
-  transition: background 0.15s, transform 0.05s;
-}
-.primary-btn:hover:not(:disabled) { background: var(--accent); }
-.primary-btn:active:not(:disabled) { transform: translateY(1px); }
-.primary-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-.level-row {
-  display: flex;
-  gap: 4px;
-  flex: 1;
-  flex-wrap: wrap;
-}
-.level-btn {
-  flex: 1 1 auto;
-  min-width: 30px;
-  background: var(--bg-elev);
-  color: var(--text);
-  border: 1px solid var(--border-clr);
-  border-radius: 6px;
-  padding: 6px 8px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  transition: background 0.15s, border 0.15s;
-}
-.level-btn:hover { background: #3a3d4a; }
-.level-btn.selected { background: var(--accent-strong); color: white; border-color: var(--accent-strong); }
-
-
-.settings-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  z-index: 200;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.settings-panel {
-  background: var(--bg-panel);
-  border-left: 1px solid var(--border-clr);
-  width: min(420px, 100vw);
-  height: 100vh;
-  overflow: auto;
-  box-shadow: -10px 0 40px rgba(0, 0, 0, 0.5);
+/* ============================================================
+   MoveHistory component
+   ============================================================ */
+.move-history {
   display: flex;
   flex-direction: column;
-  animation: slidein 0.2s ease;
+  height: 100%;
+  font-size: 14px;
 }
-@keyframes slidein {
-  from { transform: translateX(20px); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
-}
-
-.settings-header {
+.move-history-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-clr);
-  position: sticky;
-  top: 0;
-  background: var(--bg-panel);
-}
-.settings-header h2 { margin: 0; font-size: 18px; }
-.icon-btn {
-  background: transparent;
-  color: var(--text-dim);
-  border: none;
-  cursor: pointer;
-  font-size: 18px;
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-}
-.icon-btn:hover { background: var(--bg-elev); color: var(--text); }
-
-.settings-body {
-  padding: 16px 20px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-.settings-section h3 {
-  margin: 0 0 10px;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  color: var(--text-dim);
-}
-.setting-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 10px;
-  flex-wrap: wrap;
-}
-.setting-row > label { flex: 0 0 140px; color: var(--text-dim); font-size: 14px; }
-.setting-value { color: var(--text-dim); font-size: 13px; min-width: 36px; text-align: right; }
-
-input[type='range'] { flex: 1; min-width: 120px; }
-input[type='checkbox'] { width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent-strong); }
-input[type='color'] {
-  width: 36px;
-  height: 28px;
-  background: transparent;
-  border: 1px solid var(--border-clr);
-  border-radius: 6px;
-  cursor: pointer;
-  padding: 0;
-}
-
-.theme-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  flex: 1;
-}
-.theme-chip {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--bg-elev);
-  border: 1px solid var(--border-clr);
-  color: var(--text);
-  padding: 8px 10px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 13px;
-  text-align: left;
-  transition: border 0.15s, background 0.15s;
-}
-.theme-chip:hover { background: #3a3d4a; }
-.theme-chip.selected { border-color: var(--accent-strong); background: rgba(168, 85, 247, 0.12); }
-.theme-swatch {
-  display: flex;
-  width: 36px;
-  height: 24px;
-  border-radius: 4px;
-  overflow: hidden;
-  border: 1px solid rgba(0, 0, 0, 0.3);
-  background-color: #555;
-  background-size: cover;
-  background-position: center;
-}
-.theme-swatch span {
-  display: inline-block;
-  width: 18px;
-  height: 100%;
-}
-.theme-swatch span:first-child { border-radius: 4px 0 0 4px; }
-.theme-swatch span:last-child { border-radius: 0 4px 4px 0; }
-.theme-name { font-weight: 500; font-size: 12px; line-height: 1.2; }
-
-.piece-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-}
-.piece-chip {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--bg-elev);
-  border: 1px solid var(--border-clr);
-  color: var(--text);
-  padding: 8px 10px;
-  border-radius: 8px;
-  cursor: pointer;
-  text-align: left;
-  transition: border 0.15s, background 0.15s;
-}
-.piece-chip:hover { background: #3a3d4a; }
-.piece-chip.selected { border-color: var(--accent-strong); background: rgba(168, 85, 247, 0.12); }
-.piece-preview {
-  display: flex;
-  width: 42px;
-  height: 28px;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 4px;
-  padding: 2px;
-}
-.piece-preview img { width: 100%; height: 100%; object-fit: contain; }
-.piece-name { font-weight: 500; font-size: 12px; line-height: 1.2; }
-
-.color-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-.color-input { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-dim); }
-
-.seg-group {
-  display: inline-flex;
-  background: var(--bg-elev);
-  border: 1px solid var(--border-clr);
-  border-radius: 8px;
-  padding: 2px;
-  flex-wrap: wrap;
-}
-.seg-group.vertical { flex-direction: column; }
-.seg {
-  background: transparent;
-  color: var(--text-dim);
-  border: none;
-  padding: 6px 12px;
-  font-size: 13px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-.seg:hover { color: var(--text); }
-.seg.selected { background: var(--accent-strong); color: white; }
-
-.text-btn {
-  background: transparent;
-  color: var(--accent);
-  border: none;
-  cursor: pointer;
-  font-size: 13px;
-  padding: 4px 6px;
-}
-.text-btn:hover { text-decoration: underline; }
-
-.danger-btn {
-  background: transparent;
-  color: #ff7a7a;
-  border: 1px solid #5a2a2a;
-  padding: 8px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 13px;
-}
-.danger-btn:hover { background: rgba(255, 80, 80, 0.1); }
-
-.settings-footer {
-  border-top: 1px solid var(--border-clr);
-  padding-top: 16px;
-  display: flex;
-  justify-content: flex-end;
-}
-
-/* Bulk move-evaluation progress (review mode) */
-.bulk-progress {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: var(--text-dim);
-  margin-left: auto;
-  margin-right: 6px;
-}
-.bulk-spinner {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border: 2px solid var(--text-dim);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: bulk-spin 0.7s linear infinite;
-}
-.bulk-text { font-variant-numeric: tabular-nums; }
-@keyframes bulk-spin {
-  to { transform: rotate(360deg); }
-}
-
-/* Fullscreen board (chess.com / Lichess "expand" mode). The board
- * grows to fill the viewport, the side panel is hidden, and the
- * status bar / move list collapse into a small overlay so the
- * board is the visual focus. */
-.app.board-fullscreen {
-  max-width: none;
-  width: 100vw;
-  height: 100vh;
-  margin: 0;
-  padding: 16px 20px;
-  box-sizing: border-box;
-  overflow: hidden;
-}
-.app.board-fullscreen .app-main {
-  max-width: none;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-}
-.app.board-fullscreen .board-area {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-.app.board-fullscreen .board {
-  /* Let the board grow as large as possible while keeping the
-   * controls visible. */
-  max-width: min(100vw - 40px, 100vh - 200px);
-  max-height: min(100vh - 200px, 100vw - 40px);
-  width: auto;
-  height: auto;
-  aspect-ratio: 1;
-}
-.app.board-fullscreen .board-row {
-  max-width: min(100vw - 40px, 100vh - 200px);
-}
-.app.board-fullscreen .board-frame {
-  max-width: min(100vw - 40px, 100vh - 200px);
-  max-height: min(100vh - 200px, 100vw - 40px);
-}
-.app.board-fullscreen .controls,
-.app.board-fullscreen .arrow-toolbar,
-.app.board-fullscreen .status-bar,
-.app.board-fullscreen .app-header,
-.app.board-fullscreen .captured-row,
-.app.board-fullscreen .clock-display {
-  display: none;
-}
-
-/* === New chess.com-style layout ===
-   Top: centered title + meta line + status pill
-   Main: 3-column stage with [left player-strip | board+eval | moves panel]
-   Below: resign/draw, arrow toolbar, controls
-*/
-
-.app-header {
-  text-align: center;
-  padding: 14px 0 8px;
+  padding: 4px 0;
   flex-shrink: 0;
 }
-.app-header h1 {
+.move-history-header h3 {
   margin: 0;
-  font-size: 26px;
-  font-weight: 600;
-  letter-spacing: -0.3px;
-  background: linear-gradient(90deg, #c084fc, #38bdf8);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  display: inline-block;
-}
-.app-header h1 .beta-tag {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-  background: linear-gradient(90deg, #fbbf24, #f59e0b);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  margin-left: 10px;
-  vertical-align: super;
-  opacity: 0.95;
-}
-.app-header .header-meta {
-  margin-top: 6px;
   font-size: 12px;
-  color: var(--text-dim);
-  font-weight: 500;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cc-text-muted);
 }
-.app-header .header-meta .meta-info { white-space: nowrap; }
-.app-header .header-meta .meta-rating { color: var(--text-dim); }
-.app-header .header-meta .meta-opening {
-  margin-left: 8px;
-  font-style: italic;
-  color: var(--accent);
+.move-nav {
+  display: flex;
+  gap: 4px;
 }
-.app-header .status-pill {
-  display: inline-block;
-  margin-top: 10px;
-  padding: 6px 22px;
-  background: #1a1a1a;
-  border: 1px solid #4a4d5a;
-  border-radius: 22px;
-  color: #e6e6ec;
-  font-weight: 600;
+.nav-btn {
+  background: var(--cc-bg-elev-2);
+  border: 1px solid var(--cc-border-subtle);
+  color: var(--cc-text);
+  width: 28px;
+  height: 26px;
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
   font-size: 13px;
+  cursor: pointer;
+  transition: background var(--cc-transition), border-color var(--cc-transition);
 }
-.app-header .status-pill[data-status='check'] {
-  background: rgba(255, 80, 80, 0.18);
-  border-color: #b94a4a;
-  color: #ffb0b0;
-}
+.nav-btn:hover:not(:disabled) { background: var(--cc-bg-elev-3); border-color: var(--cc-border-strong); }
+.nav-btn:disabled { opacity: .35; cursor: not-allowed; }
 
-.app-main {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+.move-list {
   flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   min-height: 0;
-  width: 100%;
-  padding: 0 20px 16px;
-  gap: 12px;
-  overflow: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--cc-border) transparent;
 }
-
-.board-area {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  max-width: 1100px;
-  min-height: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
+.move-list .empty {
+  color: var(--cc-text-dim);
+  font-size: 13px;
+  text-align: center;
+  padding: 24px 0;
 }
-
-/* Three-column stage. The left column has two player-strip halves
-   stacked vertically so the top player's details sit above the
-   board and the bottom player's below it. */
-.board-stage {
+.move-row {
   display: flex;
-  flex-direction: row;
   align-items: stretch;
-  gap: 10px;
+  border-radius: 4px;
+  gap: 2px;
+  padding: 1px 0;
+}
+.move-row:hover { background: var(--cc-bg-elev-2); }
+.move-num {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 32px;
+  padding: 3px 6px;
+  color: var(--cc-text-dim);
+  font-weight: 600;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.move-cell {
   flex: 1 1 auto;
-  min-height: 0;
-  width: 100%;
-  justify-content: center;
-}
-.board-left {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--cc-text);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  padding: 3px 8px;
+  border-radius: 3px;
+  cursor: pointer;
   display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  flex: 0 0 64px;
-  min-height: 0;
-}
-.board-left .player-strip {
-  display: flex;
-  flex-direction: column;
   align-items: center;
   gap: 4px;
-  flex: 1 1 0;
-  min-height: 0;
-  padding: 4px 0;
-}
-.player-pill {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  width: 100%;
-  padding: 6px 8px;
-  border-radius: 8px;
-  font-weight: 700;
-  font-size: 11px;
-  letter-spacing: 0.5px;
-}
-.player-pill-white {
-  background: #f0f0f0;
-  color: #18181b;
-  border: 1px solid #c0c0c0;
-}
-.player-pill-black {
-  background: #18181b;
-  color: #f4f4f5;
-  border: 1px solid #2a2a2a;
-}
-.player-pill-capture-count {
-  font-size: 10px;
-  font-weight: 600;
-  opacity: 0.65;
-}
-
-.board-and-eval {
-  display: flex;
-  flex-direction: row;
-  align-items: stretch;
-  gap: 6px;
-  flex: 0 1 auto;
-  min-height: 0;
+  transition: background var(--cc-transition);
+  font-family: inherit;
   min-width: 0;
 }
-.board-and-eval > .board {
-  flex: 0 1 auto;
-  align-self: center;
-  height: 100%;
-  aspect-ratio: 1;
-  max-height: 100%;
-  max-width: 100%;
-}
-.board-and-eval > .eval-bar-vertical {
-  width: 14px;
-  min-width: 14px;
-  align-self: stretch;
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.moves-panel {
-  display: flex;
-  flex-direction: column;
-  flex: 0 0 280px;
-  min-width: 240px;
-  background: #16171f;
-  border: 1px solid #2a2c38;
-  border-radius: 10px;
-  overflow: hidden;
-  min-height: 0;
-}
-.moves-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  border-bottom: 1px solid #2a2c38;
-  background: #1d1f2a;
-}
-.moves-title {
-  font-size: 12px;
+.move-cell:hover { background: var(--cc-bg-elev-3); }
+.move-cell.active {
+  background: var(--cc-accent-soft);
+  border-color: var(--cc-accent);
+  color: var(--cc-text-bright);
   font-weight: 700;
-  letter-spacing: 0.5px;
-  color: #d1d5db;
-  text-transform: uppercase;
 }
-.moves-nav {
-  display: flex;
-  gap: 2px;
-}
-.moves-nav .nav-btn {
-  background: transparent;
-  border: 1px solid transparent;
-  color: #c0c0c0;
-  font-size: 14px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  cursor: pointer;
-}
-.moves-nav .nav-btn:hover:not(:disabled) {
-  background: #2a2c38;
-  color: white;
-}
-.moves-nav .nav-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-.moves-list {
-  overflow-y: auto;
+.move-cell.past { color: var(--cc-text-muted); }
+.move-cell:disabled { opacity: .35; cursor: not-allowed; }
+.move-text {
   flex: 1 1 auto;
-  padding: 4px 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.moves-panel .empty {
-  color: #6b7280;
-  font-size: 13px;
-  padding: 12px;
-  text-align: center;
-}
-.moves-panel .move-row {
-  display: grid;
-  grid-template-columns: 28px 1fr auto 1fr auto;
-  gap: 4px;
-  align-items: center;
-  font-size: 13px;
-}
-.moves-panel .move-num { color: #6b7280; text-align: right; padding-right: 4px; }
-.moves-panel .move-cell {
-  background: transparent;
-  color: #e6e6ec;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  padding: 2px 6px;
-  text-align: left;
-  cursor: pointer;
-  font-family: ui-monospace, Consolas, monospace;
-  font-size: 13px;
-}
-.moves-panel .move-cell:hover:not(:disabled) { background: #2a2c38; }
-.moves-panel .move-cell.active { background: #a855f7; color: white; }
-.moves-panel .move-cell.past { color: #9ca3af; }
-.moves-panel .move-cell:disabled { color: #4b5563; cursor: default; }
-.moves-panel .move-icon { display: inline-flex; align-items: center; margin-left: 4px; vertical-align: middle; }
-.moves-panel .move-icon svg { display: block; }
-.moves-panel .move-time {
-  color: #6b7280;
-  font-family: ui-monospace, Consolas, monospace;
-  font-size: 11px;
-  min-width: 36px;
-  padding-left: 4px;
-}
-.moves-panel .bulk-progress {
+.move-icon {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: #9ca3af;
-  padding: 6px 10px;
 }
-.moves-panel .bulk-spinner {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border: 2px solid #4b5563;
-  border-top-color: #a855f7;
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
+/* Classification tag icons – chess.com uses colored circles. We use
+   the TagIcon component which renders an SVG; we just ensure the
+   inline SVG inherits the classification color. */
+.move-cell .icon-book      svg { color: var(--cc-book); }
+.move-cell .icon-brilliant svg { color: var(--cc-brilliant); }
+.move-cell .icon-great     svg { color: var(--cc-great-find); }
+.move-cell .icon-best      svg { color: var(--cc-best); }
+.move-cell .icon-good      svg { color: var(--cc-good); }
+.move-cell .icon-inaccuracy svg { color: var(--cc-inaccuracy); }
+.move-cell .icon-mistake   svg { color: var(--cc-mistake); }
+.move-cell .icon-blunder   svg { color: var(--cc-blunder); }
+/* SVG inside the component is rendered as children, so we target
+   svg inside the icon span. */
+.move-icon svg { display: block; }
+/* The tag icon colors also apply when the move-cell is active:
+   keep the icon visible over the green highlight. */
+.move-cell.active .move-icon svg { filter: brightness(1.3); }
 
-.below-board {
+.move-time {
+  font-size: 11px;
+  color: var(--cc-text-dim);
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  width: 100%;
-  max-width: 1100px;
+  padding: 0 4px;
+  min-width: 32px;
+  justify-content: flex-end;
+  font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
 
-.resign-row {
+/* Bulk-analysis progress inline in the move list */
+.bulk-progress {
   display: flex;
-  gap: 10px;
-  justify-content: center;
-  margin-top: 4px;
-}
-.resign-btn,
-.draw-btn {
-  background: transparent;
-  border: 1px solid #b91c1c;
-  color: #fca5a5;
-  padding: 6px 16px;
-  border-radius: 6px;
-  font-weight: 600;
-  font-size: 13px;
-  cursor: pointer;
-  display: inline-flex;
   align-items: center;
   gap: 6px;
-}
-.resign-btn:hover { background: rgba(220, 38, 38, 0.18); }
-.draw-btn {
-  border-color: #4b5563;
-  color: #d1d5db;
-}
-.draw-btn:hover { background: rgba(75, 85, 99, 0.2); }
-.resign-flag { color: #b91c1c; }
-
-.arrow-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 6px 10px;
-  background: #16171f;
-  border: 1px solid #2a2c38;
-  border-radius: 8px;
-  margin: 0;
-  flex-wrap: wrap;
-  font-size: 12px;
-}
-.arrow-toolbar-label {
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  color: #9ca3af;
   font-size: 11px;
+  color: var(--cc-text-muted);
 }
-.arrow-swatch {
-  width: 22px;
-  height: 22px;
+.bulk-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--cc-border);
+  border-top-color: var(--cc-accent);
   border-radius: 50%;
-  border: 2px solid transparent;
-  cursor: pointer;
+  animation: bulk-spin 0.8s linear infinite;
 }
-.arrow-swatch-green { background: #5fb760; }
-.arrow-swatch-red { background: #c94747; }
-.arrow-swatch-yellow { background: #e8b332; }
-.arrow-swatch-blue { background: #5b8ec7; }
-.arrow-swatch.selected {
-  border-color: white;
-  box-shadow: 0 0 0 1px #1a1a1a, 0 0 0 3px rgba(192, 132, 252, 0.6);
-}
-.arrow-clear-btn {
-  background: transparent;
-  border: 1px solid #4b5563;
-  color: #d1d5db;
-  padding: 4px 10px;
-  border-radius: 4px;
-  font-size: 11px;
-  cursor: pointer;
-}
-.arrow-clear-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.arrow-clear-btn:hover:not(:disabled) { background: #2a2c38; }
-.arrow-hint { color: #6b7280; font-size: 11px; }
+@keyframes bulk-spin { to { transform: rotate(360deg); } }
+.bulk-text { white-space: nowrap; }
 
-.premove-banner {
-  background: rgba(192, 132, 252, 0.12);
-  border: 1px solid rgba(192, 132, 252, 0.4);
-  color: #e6e6ec;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 12px;
-  max-width: 800px;
-  text-align: center;
+/* ============================================================
+   Piece-move animation keyframes
+   ============================================================ */
+@keyframes piece-slide {
+  from { transform: translate(0, 0); }
+  to   { transform: translate(var(--dx), var(--dy)); }
 }
-.premove-banner.status-error { color: #fca5a5; }
-
-.controls {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-  flex-wrap: wrap;
+@keyframes piece-arc {
+  from { transform: translate(0, 0) rotate(0deg); }
+  to   { transform: translate(var(--dx), calc(var(--dy) - var(--arc-lift))) rotate(12deg); }
 }
-.controls button {
-  background: #1d1f2a;
-  border: 1px solid #2a2c38;
-  color: #e6e6ec;
-  padding: 6px 16px;
-  border-radius: 6px;
-  font-size: 13px;
-  cursor: pointer;
-  font-family: inherit;
-}
-.controls button:hover:not(:disabled) { background: #2a2c38; border-color: #4b5563; }
-.controls button:disabled { opacity: 0.4; cursor: not-allowled; }
-
-.post-game-row {
-  display: flex;
-  justify-content: center;
-  margin-top: 4px;
-}
-.review-btn,
-.review-back-btn {
-  background: #16a34a;
-  border: none;
-  color: white;
-  font-size: 14px;
-  font-weight: 700;
-  padding: 8px 32px;
-  border-radius: 6px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-.review-btn:hover { background: #15803d; }
-.review-icon { font-size: 16px; }

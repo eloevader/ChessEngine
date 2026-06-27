@@ -1316,377 +1316,464 @@ function App() {
   const bottomSide: 'w' | 'b' = orientation;
   const topSide: 'w' | 'b' = orientation === 'w' ? 'b' : 'w';
 
+  // Active right-sidebar tab. Mirrors the chess.com analysis layout
+  // (Move List / Engine Lines / Move Times). Kept here so the JSX
+  // stays in one place.
+  const [sidebarTab, setSidebarTab] = useState<'moves' | 'analysis' | 'times'>(
+    'moves',
+  );
+
   return (
     <div
       className={`app ${isReviewMode ? 'review-mode' : ''} ${boardFullscreen ? 'board-fullscreen' : ''}`}
     >
-      {/* === Top-center header: title + meta line + status pill === */}
-      <header className="app-header">
-        <h1>
-          Chess Analyzer <span className="beta-tag">beta</span>
-        </h1>
-        <div className="header-meta">
-          {lichessHeaders?.White && lichessHeaders?.Black && (
-            <span className="meta-info">
-              {lichessHeaders.White}
-              {lichessHeaders.whiteRating && (
-                <span className="meta-rating"> ({lichessHeaders.whiteRating})</span>
-              )}
-              {' vs '}
-              {lichessHeaders.Black}
-              {lichessHeaders.blackRating && (
-                <span className="meta-rating"> ({lichessHeaders.blackRating})</span>
-              )}
-              {lichessHeaders.Result ? ` — ${lichessHeaders.Result}` : ''}
-              {(lichessHeaders?.Opening || moveClassifications.openingName) && (
-                <span className="meta-opening">
-                  {'   '}
-                  {lichessHeaders?.Opening ?? moveClassifications.openingName}
-                </span>
-              )}
-            </span>
-          )}
+      {/* === Top navigation bar (chess.com style) === */}
+      <header className="cc-topbar">
+        <div className="cc-topbar-left">
+          <button
+            className="cc-icon-btn"
+            onClick={onFlip}
+            title="Flip the board"
+            aria-label="Flip the board"
+          >
+            <span className="icon-font-chess repeat" />
+          </button>
         </div>
-        <div className="status-pill" data-status={snapshot.inCheck ? 'check' : ''}>
-          {statusText}
+
+        <div className="cc-topbar-center">
+          <div className="cc-game-title">
+            {lichessHeaders?.White && lichessHeaders?.Black ? (
+              <span className="cc-game-players">
+                {lichessHeaders.White}
+                {lichessHeaders.whiteRating && (
+                  <span className="cc-game-rating"> ({lichessHeaders.whiteRating})</span>
+                )}
+                <span className="cc-game-vs">vs</span>
+                {lichessHeaders.Black}
+                {lichessHeaders.blackRating && (
+                  <span className="cc-game-rating"> ({lichessHeaders.blackRating})</span>
+                )}
+                {lichessHeaders.Result && (
+                  <span className="cc-game-result"> · {lichessHeaders.Result}</span>
+                )}
+              </span>
+            ) : (
+              <span className="cc-game-players">
+                {topSide === 'w' ? 'White' : 'Black'} vs {bottomSide === 'w' ? 'White' : 'Black'}
+              </span>
+            )}
+            {(lichessHeaders?.Opening || moveClassifications.openingName) && (
+              <div className="cc-game-opening">
+                {lichessHeaders?.Opening ?? moveClassifications.openingName}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="cc-topbar-right">
+          <button
+            className="cc-icon-btn"
+            onClick={() => setBoardFullscreen((v) => !v)}
+            title={boardFullscreen ? 'Exit fullscreen' : 'Expand board to fullscreen'}
+            aria-label="Toggle board fullscreen"
+          >
+            {boardFullscreen ? '⤡' : '⤢'}
+          </button>
+          {!isLivePlay && (
+            <button
+              className="cc-topbar-btn"
+              onClick={() => setNewGameOpen(true)}
+            >
+              New Game
+            </button>
+          )}
+          {!isLivePlay && (
+            <button
+              className="cc-topbar-btn"
+              onClick={() => setLichessOpen(true)}
+              title="Import a game from Lichess"
+            >
+              <span className="icon-font-chess lichess" aria-hidden="true">🦊</span> Import
+            </button>
+          )}
+          {isLivePlay && (
+            <button
+              className="cc-topbar-btn"
+              onClick={onUndo}
+              disabled={
+                settings.gameMode !== 'computer' ||
+                fullHistory.length === 0 ||
+                animatingMove !== null ||
+                isGameEnded
+              }
+            >
+              Undo
+            </button>
+          )}
+          <button
+            className="cc-topbar-btn primary"
+            onClick={() => setSettingsOpen(true)}
+            aria-label="Open settings"
+          >
+            <span className="icon-font-chess circle-gearwheel" />
+          </button>
         </div>
       </header>
 
-      <main className="app-main">
-        <div className="board-area">
-          {/* === Main board row: left side player details | board
-           *     + right eval bar | moves panel === */}
-          <div className="board-stage">
-            <div className="board-left">
-              {/* Top player details — sits in the upper half of the
-               *  board's height. */}
-              <div className="player-strip top">
-                <div
-                  className={`player-pill player-pill-${topSide === 'w' ? 'white' : 'black'}`}
-                >
-                  {topSide === 'w' ? 'WHITE' : 'BLACK'}
-                  <span className="player-pill-capture-count">
-                    {topSide === 'w'
-                      ? captures.black.length
-                      : captures.white.length}
-                  </span>
-                </div>
+      <main className="cc-main">
+        <div className="cc-board-area">
+          {/* === Board column: top player + board + bottom player === */}
+          <div className="cc-board-column">
+            {/* Top player bar (clock, name, captures) */}
+            <div className="cc-player-strip top">
+              {clockEnabled && (
+                <ClockDisplay
+                  side={topSide}
+                  seconds={topSide === 'w' ? clock.whiteSeconds : clock.blackSeconds}
+                  active={clock.running === topSide}
+                  label={topSide === 'w' ? 'White' : 'Black'}
+                />
+              )}
+              <div
+                className={`cc-player-name cc-player-${topSide === 'w' ? 'white' : 'black'}`}
+              >
+                <span className="cc-player-username">
+                  {topSide === 'w'
+                    ? lichessHeaders?.White ?? 'White'
+                    : lichessHeaders?.Black ?? 'Black'}
+                </span>
+                <span className="cc-player-rating">
+                  {topSide === 'w'
+                    ? lichessHeaders?.whiteRating
+                      ? `(${lichessHeaders.whiteRating})`
+                      : ''
+                    : lichessHeaders?.blackRating
+                      ? `(${lichessHeaders.blackRating})`
+                      : ''}
+                </span>
                 <CapturedRow captures={captures} side={topSide} />
-                {clockEnabled && (
-                  <ClockDisplay
-                    side={topSide}
-                    seconds={topSide === 'w' ? clock.whiteSeconds : clock.blackSeconds}
-                    active={clock.running === topSide}
-                    label={topSide === 'w' ? 'White' : 'Black'}
-                  />
-                )}
-              </div>
-              {/* Bottom player details — lower half. */}
-              <div className="player-strip bottom">
-                {clockEnabled && (
-                  <ClockDisplay
-                    side={bottomSide}
-                    seconds={bottomSide === 'w' ? clock.whiteSeconds : clock.blackSeconds}
-                    active={clock.running === bottomSide}
-                    label={bottomSide === 'w' ? 'White' : 'Black'}
-                  />
-                )}
-                <CapturedRow captures={captures} side={bottomSide} />
-                <div
-                  className={`player-pill player-pill-${bottomSide === 'w' ? 'white' : 'black'}`}
-                >
-                  {bottomSide === 'w' ? 'WHITE' : 'BLACK'}
-                  <span className="player-pill-capture-count">
-                    {bottomSide === 'w'
-                      ? captures.black.length
-                      : captures.white.length}
-                  </span>
-                </div>
               </div>
             </div>
 
-            <div className="board-and-eval">
-              <Board
-                board={board}
-                orientation={orientation}
-                selectedSquare={selected}
-                legalTargets={legalTargets}
-                captureTargets={captureTargets}
-                lastMove={lastMove}
-                kingInCheck={kingInCheck}
-                animatingMove={animatingMove}
-                arrows={allArrows}
-                squareHighlights={squareHighlights}
-                arrowColor={arrowColor}
-                preMoveHighlights={
-                  preMovesEnabled
-                    ? [
-                        ...preMoveQueue.map((m) => ({ from: m.from, to: m.to })),
-                        ...(pendingPreMoveFrom
-                          ? [{ from: pendingPreMoveFrom, to: pendingPreMoveFrom, pending: true }]
-                          : []),
-                      ]
-                    : null
-                }
-                moveTagsByTo={moveTagsByTo}
-                onArrowDraw={onArrowDraw}
-                onArrowEraseAt={onArrowEraseAt}
-                onSquareRightClick={onSquareRightClick}
-                onClearPreMoves={onClearPreMoves}
-                hasPreMoves={preMoveQueue.length > 0 || pendingPreMoveFrom !== null}
-                onSquareClick={handleSquareClick}
-                onPieceDragStart={handlePieceDragStart}
-                onDragOverSquare={() => {}}
-                onDropOnSquare={handleDropOnSquare}
-                onDragEnd={handleDragEnd}
-                onAnimationDone={() => setAnimatingMove(null)}
-              />
-              {showEvalBar && (
-                <EvalBar
-                  scoreCp={scoreCpWhite}
-                  scoreMate={scoreMateWhite}
-                  showText
-                  orientation="vertical"
-                  position="right"
-                  title={engine.bestLine ? `Depth ${engine.bestLine.depth}` : 'Eval'}
-                  status={engine.status}
-                  bestLine={engine.bestLine}
+            {/* Board + eval bar */}
+            <div className="cc-board-frame">
+              <div className="cc-board-wrap">
+                <Board
+                  board={board}
+                  orientation={orientation}
+                  selectedSquare={selected}
+                  legalTargets={legalTargets}
+                  captureTargets={captureTargets}
+                  lastMove={lastMove}
+                  kingInCheck={kingInCheck}
+                  animatingMove={animatingMove}
+                  arrows={allArrows}
+                  squareHighlights={squareHighlights}
+                  arrowColor={arrowColor}
+                  preMoveHighlights={
+                    preMovesEnabled
+                      ? [
+                          ...preMoveQueue.map((m) => ({ from: m.from, to: m.to })),
+                          ...(pendingPreMoveFrom
+                            ? [{ from: pendingPreMoveFrom, to: pendingPreMoveFrom, pending: true }]
+                            : []),
+                        ]
+                      : null
+                  }
+                  moveTagsByTo={moveTagsByTo}
+                  onArrowDraw={onArrowDraw}
+                  onArrowEraseAt={onArrowEraseAt}
+                  onSquareRightClick={onSquareRightClick}
+                  onClearPreMoves={onClearPreMoves}
+                  hasPreMoves={preMoveQueue.length > 0 || pendingPreMoveFrom !== null}
+                  onSquareClick={handleSquareClick}
+                  onPieceDragStart={handlePieceDragStart}
+                  onDragOverSquare={() => {}}
+                  onDropOnSquare={handleDropOnSquare}
+                  onDragEnd={handleDragEnd}
+                  onAnimationDone={() => setAnimatingMove(null)}
+                />
+                {showEvalBar && (
+                  <div className="cc-eval-bar-wrap">
+                    <EvalBar
+                      scoreCp={scoreCpWhite}
+                      scoreMate={scoreMateWhite}
+                      showText
+                      orientation="vertical"
+                      position="right"
+                      title={engine.bestLine ? `Depth ${engine.bestLine.depth}` : 'Eval'}
+                      status={engine.status}
+                      bestLine={engine.bestLine}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Bottom player bar */}
+            <div className="cc-player-strip bottom">
+              <div
+                className={`cc-player-name cc-player-${bottomSide === 'w' ? 'white' : 'black'}`}
+              >
+                <span className="cc-player-username">
+                  {bottomSide === 'w'
+                    ? lichessHeaders?.White ?? 'White'
+                    : lichessHeaders?.Black ?? 'Black'}
+                </span>
+                <span className="cc-player-rating">
+                  {bottomSide === 'w'
+                    ? lichessHeaders?.whiteRating
+                      ? `(${lichessHeaders.whiteRating})`
+                      : ''
+                    : lichessHeaders?.blackRating
+                      ? `(${lichessHeaders.blackRating})`
+                      : ''}
+                </span>
+                <CapturedRow captures={captures} side={bottomSide} />
+              </div>
+              {clockEnabled && (
+                <ClockDisplay
+                  side={bottomSide}
+                  seconds={bottomSide === 'w' ? clock.whiteSeconds : clock.blackSeconds}
+                  active={clock.running === bottomSide}
+                  label={bottomSide === 'w' ? 'White' : 'Black'}
                 />
               )}
             </div>
 
-            <div className="moves-panel">
-              <div className="moves-header">
-                <span className="moves-title">MOVES</span>
-                <div className="moves-nav">
+            {/* Status pill: turn / check / checkmate / draw */}
+            <div
+              className={`cc-status-pill${snapshot.inCheck ? ' check' : ''}`}
+              data-status={statusText}
+            >
+              {statusText}
+            </div>
+          </div>
+
+          {/* === Right sidebar: tabs + content (chess.com style) === */}
+          <aside className="cc-sidebar">
+            <div className="cc-sidebar-tabs" role="tablist">
+              <button
+                role="tab"
+                aria-selected={sidebarTab === 'moves'}
+                className={`cc-tab${sidebarTab === 'moves' ? ' active' : ''}`}
+                onClick={() => setSidebarTab('moves')}
+              >
+                Move list
+              </button>
+              <button
+                role="tab"
+                aria-selected={sidebarTab === 'analysis'}
+                className={`cc-tab${sidebarTab === 'analysis' ? ' active' : ''}`}
+                onClick={() => setSidebarTab('analysis')}
+              >
+                Analysis
+              </button>
+              <button
+                role="tab"
+                aria-selected={sidebarTab === 'times'}
+                className={`cc-tab${sidebarTab === 'times' ? ' active' : ''}`}
+                onClick={() => setSidebarTab('times')}
+              >
+                Move times
+              </button>
+            </div>
+
+            {sidebarTab === 'moves' && (
+              <div className="cc-sidebar-section cc-move-list">
+                <div className="cc-moves-nav">
                   <button
-                    className="nav-btn"
+                    className="cc-nav-btn"
                     onClick={onJumpStart}
-                    disabled={!onJumpStart || viewPly <= 0}
+                    disabled={viewPly <= 0}
                     aria-label="Jump to start"
                     title="Jump to start"
                   >
-                    {'\u23EE'}
+                    ⏮
                   </button>
                   <button
-                    className="nav-btn"
+                    className="cc-nav-btn"
                     onClick={onJumpBack}
                     disabled={viewPly <= 0}
                     aria-label="Step back"
-                    title="Step back (\u2190)"
+                    title="Step back (←)"
                   >
-                    {'\u23EA'}
+                    ◀
                   </button>
                   <button
-                    className="nav-btn"
+                    className="cc-nav-btn"
                     onClick={onJumpForward}
                     disabled={viewPly >= fullHistory.length}
                     aria-label="Step forward"
-                    title="Step forward (\u2192)"
+                    title="Step forward (→)"
                   >
-                    {'\u23E9'}
+                    ▶
                   </button>
                   <button
-                    className="nav-btn"
+                    className="cc-nav-btn"
                     onClick={onJumpEnd}
                     disabled={viewPly >= fullHistory.length}
                     aria-label="Jump to end"
                     title="Jump to end"
                   >
-                    {'\u23ED'}
+                    ⏭
                   </button>
                 </div>
-              </div>
-              <MoveHistory
-                history={fullHistory}
-                sanMoves={moveHistorySANS}
-                currentPly={viewPly}
-                onJumpTo={onJumpTo}
-                onJumpStart={onJumpStart}
-                onJumpBack={onJumpBack}
-                onJumpForward={onJumpForward}
-                onJumpEnd={onJumpEnd}
-                classifications={moveClassifications.classifications}
-                moveTimes={moveTimes}
-                bulkProgress={
-                  moveClassifications.bulkLoading
-                    ? {
-                        done: moveClassifications.evaluatedPlies,
-                        total: moveClassifications.totalPlies,
-                      }
-                    : null
-                }
-              />
-            </div>
-          </div>
-
-          {/* === Below the board: resign + arrow toolbar + controls === */}
-          <div className="below-board">
-            {isLivePlay && !isGameEnded && (
-              <div className="resign-row">
-                <button
-                  className="resign-btn"
-                  onClick={onResign}
-                  title="Resign the game"
-                >
-                  <span className="resign-flag">⚑</span> Resign
-                </button>
-                {canOfferDraw && (
-                  <button
-                    className="draw-btn"
-                    onClick={onOfferDraw}
-                    title="Offer a draw"
-                  >
-                    🤝 Offer Draw
-                  </button>
-                )}
-              </div>
-            )}
-
-            <div className="arrow-toolbar">
-              <span className="arrow-toolbar-label">ARROW:</span>
-              {(['green', 'red', 'yellow', 'blue'] as ArrowColor[]).map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  className={`arrow-swatch arrow-swatch-${c} ${arrowColor === c ? 'selected' : ''}`}
-                  aria-label={`${c} arrow`}
-                  title={`${c[0].toUpperCase()}${c.slice(1)} arrow`}
-                  onClick={() => setArrowColor(c)}
+                <MoveHistory
+                  history={fullHistory}
+                  sanMoves={moveHistorySANS}
+                  currentPly={viewPly}
+                  onJumpTo={onJumpTo}
+                  onJumpStart={onJumpStart}
+                  onJumpBack={onJumpBack}
+                  onJumpForward={onJumpForward}
+                  onJumpEnd={onJumpEnd}
+                  classifications={moveClassifications.classifications}
+                  moveTimes={moveTimes}
+                  bulkProgress={
+                    moveClassifications.bulkLoading
+                      ? {
+                          done: moveClassifications.evaluatedPlies,
+                          total: moveClassifications.totalPlies,
+                        }
+                      : null
+                  }
                 />
-              ))}
-              <button
-                type="button"
-                className="arrow-clear-btn"
-                onClick={onClearArrows}
-                disabled={arrows.length === 0}
-                title="Clear all arrows (Esc)"
-              >
-                Clear
-              </button>
-              <span className="arrow-hint">
-                Right-click + drag on the board to draw
-              </span>
-            </div>
+              </div>
+            )}
 
-            {preMovesEnabled && (queuedCount > 0 || pendingPreMoveFrom) && (
-              <div className="premove-banner">
-                {queuedCount > 0 ? (
-                  <span>
-                    Pre-move{queuedCount > 1 ? 's' : ''} queued
-                    {queuedCount > 1 ? ` (${queuedCount})` : ''}:{' '}
-                    {preMoveQueue.map((m) => `${m.from}→${m.to}`).join(', ')}
-                    {pendingPreMoveFrom && ` (+ ${pendingPreMoveFrom}→?)`}
-                    {' · right-click board to clear'}
-                  </span>
-                ) : (
-                  <span>
-                    Pre-move from {pendingPreMoveFrom} — pick a destination (right-click to clear)
-                  </span>
+            {sidebarTab === 'analysis' && (
+              <div className="cc-sidebar-section cc-analysis">
+                <div className="cc-engine-status">
+                  {engine.status === 'ready'
+                    ? `Engine ready · depth ${engine.bestLine?.depth ?? '—'}`
+                    : engine.status === 'thinking'
+                      ? 'Engine thinking…'
+                      : engine.status === 'error'
+                        ? 'Engine offline'
+                        : 'Engine idle'}
+                </div>
+                {engine.bestLine && engine.bestLine.pv.length > 0 && (
+                  <div className="cc-engine-line">
+                    <div className="cc-engine-line-label">Best line</div>
+                    <div className="cc-engine-line-pv">
+                      {engine.bestLine.pv.join(' ')}
+                    </div>
+                  </div>
                 )}
               </div>
             )}
 
-            {moveClassifications.bulkLoading && (
-              <div className="premove-banner">
-                Analyzing moves {moveClassifications.evaluatedPlies}/
-                {moveClassifications.totalPlies}…
+            {sidebarTab === 'times' && (
+              <div className="cc-sidebar-section cc-times">
+                {moveTimes.length <= 1 ? (
+                  <div className="cc-empty">No time data — play a clocked game.</div>
+                ) : (
+                  <div className="cc-time-list">
+                    {moveTimes.slice(1).map((t, i) => (
+                      <div
+                        key={i}
+                        className={`cc-time-row ${i + 1 === viewPly ? 'current' : ''}`}
+                        onClick={() => jumpToPly(i + 1)}
+                      >
+                        <span className="cc-time-ply">
+                          {Math.floor(i / 2) + 1}
+                          {i % 2 === 0 ? '.' : '...'}
+                        </span>
+                        <span className="cc-time-secs">{t.toFixed(1)}s</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
-            {settings.gameMode === 'computer' &&
-              engine.status === 'loading' && (
-                <div className="premove-banner status-error">
-                  Engine offline — run: node scripts/stockfish-bridge.js
+            <div className="cc-sidebar-footer">
+              <div className="cc-arrow-toolbar">
+                <span className="cc-arrow-label">ARROW</span>
+                {(['green', 'red', 'yellow', 'blue'] as ArrowColor[]).map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    className={`cc-arrow-swatch cc-arrow-${c}${arrowColor === c ? ' selected' : ''}`}
+                    aria-label={`${c} arrow`}
+                    title={`${c[0].toUpperCase()}${c.slice(1)} arrow`}
+                    onClick={() => setArrowColor(c)}
+                  />
+                ))}
+                <button
+                  type="button"
+                  className="cc-arrow-clear"
+                  onClick={onClearArrows}
+                  disabled={arrows.length === 0}
+                  title="Clear all arrows (Esc)"
+                >
+                  Clear
+                </button>
+              </div>
+
+              {isLivePlay && !isGameEnded && (
+                <div className="cc-game-actions">
+                  {canResign && (
+                    <button className="cc-action-btn" onClick={onResign}>
+                      <span className="cc-action-icon">⚑</span> Resign
+                    </button>
+                  )}
+                  {canOfferDraw && (
+                    <button className="cc-action-btn" onClick={onOfferDraw}>
+                      🤝 Offer Draw
+                    </button>
+                  )}
                 </div>
               )}
 
-            <div className="controls">
-              {!isLivePlay && (
+              {isGameEnded && !isReviewMode && (
                 <button
-                  onClick={() => {
-                    if (!isGameEnded && fullHistory.length > 0) {
-                      if (!window.confirm('This will discard your current game. Continue?')) {
-                        return;
-                      }
-                    }
-                    setNewGameOpen(true);
-                  }}
+                  className="cc-review-btn"
+                  onClick={onReview}
                 >
-                  New Game
+                  <span className="cc-action-icon">↻</span> Game Review
                 </button>
               )}
-              {!isLivePlay && (
-                <button
-                  onClick={() => {
-                    if (!isGameEnded && fullHistory.length > 0) {
-                      if (
-                        !window.confirm('Replace the current game with an imported one?')
-                      ) {
-                        return;
-                      }
-                    }
-                    setLichessOpen(true);
-                  }}
-                  title="Import a game from Lichess"
-                >
-                  Lichess
+              {isReviewMode && (
+                <button className="cc-review-btn" onClick={onExitReview}>
+                  Back to result
                 </button>
               )}
-              {isLivePlay && (
-                <button
-                  onClick={onUndo}
-                  disabled={
-                    settings.gameMode !== 'computer' ||
-                    fullHistory.length === 0 ||
-                    animatingMove !== null ||
-                    isGameEnded
-                  }
-                  title={
-                    settings.gameMode === 'computer'
-                      ? 'Undo last move'
-                      : 'Undo only available vs Computer'
-                  }
-                >
-                  Undo
-                </button>
-              )}
-              <button onClick={onFlip}>Flip</button>
-              <button
-                onClick={() => setBoardFullscreen((v) => !v)}
-                title={boardFullscreen ? 'Exit fullscreen' : 'Expand board to fullscreen'}
-                aria-label="Toggle board fullscreen"
-              >
-                {boardFullscreen ? '⤡ Exit' : '⤢ Fullscreen'}
-              </button>
-              <button onClick={() => setSettingsOpen(true)} aria-label="Open settings">
-                Settings
-              </button>
-            </div>
-          </div>
 
-          {/* Post-game actions: Review when the game has just ended,
-           *  or "Back to result" when in review mode. */}
-          {isGameEnded && !isReviewMode && (
-            <div className="post-game-row">
-              <button
-                className="primary-action review-btn"
-                onClick={onReview}
-              >
-                <span className="review-icon">↻</span> Game Review
-              </button>
+              {preMovesEnabled && (queuedCount > 0 || pendingPreMoveFrom) && (
+                <div className="cc-premove-banner">
+                  {queuedCount > 0 ? (
+                    <span>
+                      Pre-move{queuedCount > 1 ? 's' : ''} queued
+                      {queuedCount > 1 ? ` (${queuedCount})` : ''}:{' '}
+                      {preMoveQueue.map((m) => `${m.from}→${m.to}`).join(', ')}
+                      {pendingPreMoveFrom && ` (+ ${pendingPreMoveFrom}→?)`}
+                      {' · right-click board to clear'}
+                    </span>
+                  ) : (
+                    <span>
+                      Pre-move from {pendingPreMoveFrom} — pick a destination (right-click to clear)
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {moveClassifications.bulkLoading && (
+                <div className="cc-premove-banner">
+                  Analyzing moves {moveClassifications.evaluatedPlies}/
+                  {moveClassifications.totalPlies}…
+                </div>
+              )}
+
+              {settings.gameMode === 'computer' &&
+                engine.status === 'loading' && (
+                  <div className="cc-premove-banner cc-status-error">
+                    Engine offline — run: node scripts/stockfish-bridge.js
+                  </div>
+                )}
             </div>
-          )}
-          {isReviewMode && (
-            <div className="post-game-row">
-              <button
-                className="primary-action review-back-btn"
-                onClick={onExitReview}
-              >
-                Back to result
-              </button>
-            </div>
-          )}
+          </aside>
         </div>
       </main>
       {pendingPromotion && (
