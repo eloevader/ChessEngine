@@ -7,10 +7,6 @@ interface MoveHistoryProps {
   sanMoves: LegalMove[];
   currentPly: number;
   onJumpTo: (ply: number) => void;
-  onJumpStart?: () => void;
-  onJumpBack?: () => void;
-  onJumpForward?: () => void;
-  onJumpEnd?: () => void;
   /** Per-ply classification (optional). When present, each move
    *  gets a colored tag dot. */
   classifications?: ClassifiedPly[];
@@ -41,10 +37,6 @@ export function MoveHistory({
   history,
   currentPly,
   onJumpTo,
-  onJumpStart,
-  onJumpBack,
-  onJumpForward,
-  onJumpEnd,
   classifications,
   bulkProgress,
   moveTimes,
@@ -60,9 +52,6 @@ export function MoveHistory({
       blackIndex: i + 1,
     });
   }
-
-  const atStart = currentPly <= 0;
-  const atEnd = currentPly >= history.length;
 
   const tagFor = (ply: number): MoveTag | null => {
     if (!classifications) return null;
@@ -84,44 +73,6 @@ export function MoveHistory({
             </span>
           </span>
         )}
-        <div className="move-nav">
-          <button
-            className="nav-btn"
-            onClick={onJumpStart}
-            disabled={!onJumpStart || atStart}
-            aria-label="Jump to start"
-            title="Jump to start"
-          >
-            {'\u23EE'}
-          </button>
-          <button
-            className="nav-btn"
-            onClick={onJumpBack}
-            disabled={!onJumpBack || atStart}
-            aria-label="Step back"
-            title="Step back"
-          >
-            {'\u23EA'}
-          </button>
-          <button
-            className="nav-btn"
-            onClick={onJumpForward}
-            disabled={!onJumpForward || atEnd}
-            aria-label="Step forward"
-            title="Step forward"
-          >
-            {'\u23E9'}
-          </button>
-          <button
-            className="nav-btn"
-            onClick={onJumpEnd}
-            disabled={!onJumpEnd || atEnd}
-            aria-label="Jump to end"
-            title="Jump to end"
-          >
-            {'\u23ED'}
-          </button>
-        </div>
       </div>
       <div className="move-list">
         {rows.length === 0 && <div className="empty">No moves yet</div>}

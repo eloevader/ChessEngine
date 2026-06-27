@@ -458,6 +458,13 @@ body {
 
 /* Move list nav buttons (chess.com has these as small icons
    above the move list). */
+.cc-moves-nav {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--cc-border-subtle);
+}
 .cc-nav-btn {
   background: var(--cc-bg-elev-2);
   border: 1px solid var(--cc-border-subtle);
@@ -1004,26 +1011,6 @@ body {
   letter-spacing: 0.05em;
   color: var(--cc-text-muted);
 }
-.move-nav {
-  display: flex;
-  gap: 4px;
-}
-.nav-btn {
-  background: var(--cc-bg-elev-2);
-  border: 1px solid var(--cc-border-subtle);
-  color: var(--cc-text);
-  width: 28px;
-  height: 26px;
-  border-radius: 4px;
-  display: grid;
-  place-items: center;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background var(--cc-transition), border-color var(--cc-transition);
-}
-.nav-btn:hover:not(:disabled) { background: var(--cc-bg-elev-3); border-color: var(--cc-border-strong); }
-.nav-btn:disabled { opacity: .35; cursor: not-allowed; }
-
 .move-list {
   flex: 1 1 auto;
   overflow-y: auto;
