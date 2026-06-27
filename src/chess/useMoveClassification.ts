@@ -29,10 +29,9 @@ import {
   type MoveTag,
 } from './classifier';
 import {
-  fetchExplorer,
-  isInExplorer,
-  type ExplorerResponse,
-} from './lichessExplorer';
+  loadBook,
+  lookupBook,
+} from './openingBook';
 
 interface UseMoveClassificationOptions {
   history: string[];
@@ -73,12 +72,15 @@ export function useMoveClassification(opts: UseMoveClassificationOptions): {
   // their tag in the move list). A ply is "ready" once both the
   // BEFORE and AFTER positions have been evaluated.
   const [ready, setReady] = useState<Set<number>>(new Set());
-  // Per-ply Lichess explorer cache.
-  const [explorerCache, setExplorerCache] = useState<Map<number, ExplorerResponse | null>>(
+  // Per-ply opening-book cache. The book is loaded once at the
+  // start of the session; we look up each ply's FEN locally.
+  const [bookCache, setBookCache] = useState<Map<number, string | null>>(
     new Map(),
   );
-  const explorerCacheRef = useRef<Map<number, ExplorerResponse | null>>(explorerCache);
-  explorerCacheRef.current = explorerCache;
+  const bookCacheRef = useRef<Map<number, string | null>>(bookCache);
+  bookCacheRef.current = bookCache;
+  // The raw book (FEN → name) loaded from the JSON file.
+  const [book, setBook] = useState<Map<string, string> | null>(null);
   const [openingName, setOpeningName] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
@@ -91,7 +93,7 @@ export function useMoveClassification(opts: UseMoveClassificationOptions): {
   useEffect(() => {
     setEvalCache(new Map());
     setReady(new Set());
-    setExplorerCache(new Map());
+    setBookCache(new Map());
     setOpeningName(null);
     setEvaluatedPlies(0);
   }, [history.length === 0]);
@@ -166,19 +168,37 @@ export function useMoveClassification(opts: UseMoveClassificationOptions): {
             });
             return next;
           });
-          // Also fetch the explorer for this ply (best-effort, in
-          // parallel — we don't await it before continuing).
-          void fetchExplorer(fen, 12).then((res) => {
-            if (cancelled) return;
-            setExplorerCache((prev) => {
+          // Look up the opening name from the local book. If the
+          // book hasn't loaded yet, we kick off the load here.
+          const lookupName = (b: Map<string, string> | null) => {
+            if (!b) return null;
+            return lookupBook(b, fen);
+          };
+          let name = lookupName(book);
+          if (name === null && !book) {
+            // Book not loaded yet — load it now (will be cached for
+            // subsequent calls).
+            loadBook().then((b) => {
+              if (cancelled) return;
+              setBook(b);
+              const n = lookupBook(b, fen);
+              if (n !== null) {
+                setBookCache((prev) => {
+                  const next = new Map(prev);
+                  next.set(ply, n);
+                  return next;
+                });
+                if (ply === viewPly) setOpeningName(n);
+              }
+            });
+          } else if (name !== null) {
+            setBookCache((prev) => {
               const next = new Map(prev);
-              next.set(ply, res);
+              next.set(ply, name);
               return next;
             });
-            if (ply === viewPly && res?.opening?.name) {
-              setOpeningName(res.opening.name);
-            }
-          });
+            if (ply === viewPly) setOpeningName(name);
+          }
           setEvaluatedPlies((n) => n + 1);
           onPlyEvaluated?.(ply);
         } catch {
@@ -209,8 +229,8 @@ export function useMoveClassification(opts: UseMoveClassificationOptions): {
       for (let ply = 0; ply <= viewPly; ply++) {
         if (cancelled) return;
         const needEngine = !evalCacheRef.current.has(ply);
-        const needExplorer = !explorerCacheRef.current.has(ply);
-        if (!needEngine && !needExplorer) continue;
+        const needBook = !bookCacheRef.current.has(ply);
+        if (!needEngine && !needBook) continue;
         const fen = fensAtPly[ply];
         if (!fen) continue;
         const tasks: Array<Promise<void>> = [];
@@ -248,19 +268,21 @@ export function useMoveClassification(opts: UseMoveClassificationOptions): {
             })(),
           );
         }
-        if (needExplorer) {
+        if (needBook) {
           tasks.push(
             (async () => {
               try {
-                const res = await fetchExplorer(fen, 12);
+                const b = book ?? (await loadBook());
                 if (cancelled) return;
-                setExplorerCache((prev) => {
-                  const next = new Map(prev);
-                  next.set(ply, res);
-                  return next;
-                });
-                if (ply === viewPly && res?.opening?.name) {
-                  setOpeningName(res.opening.name);
+                setBook(b);
+                const name = lookupBook(b, fen);
+                if (name !== null) {
+                  setBookCache((prev) => {
+                    const next = new Map(prev);
+                    next.set(ply, name);
+                    return next;
+                  });
+                  if (ply === viewPly) setOpeningName(name);
                 }
               } catch {
                 /* ignore */
@@ -290,15 +312,13 @@ export function useMoveClassification(opts: UseMoveClassificationOptions): {
       const wasCheck = san.includes('+');
       const isMating = san.includes('#');
       const plyReady = ready.has(ply);
-      const explorer = explorerCache.get(ply - 1);
-      const inExplorer = isInExplorer(explorer ?? null, san);
+      // Opening name from the local book (looked up by the FEN of
+      // the position AFTER the move).
+      const bookName = bookCache.get(ply);
       const hardcodedBook = isBookMove(history.slice(0, ply));
-      const explorerBook = inExplorer && explorer?.opening != null;
-      const book = {
-        inBook: hardcodedBook.inBook || explorerBook,
-        opening:
-          hardcodedBook.opening ?? explorer?.opening?.name ?? null,
-      };
+      const inBook = bookName != null || hardcodedBook.inBook;
+      const bookOpening = bookName ?? hardcodedBook.opening ?? null;
+      const book = { inBook, opening: bookOpening };
       let classification: ClassifiedMove;
       if (!plyReady) {
         classification = { tag: '?', score: 0, description: '' };
@@ -334,7 +354,7 @@ export function useMoveClassification(opts: UseMoveClassificationOptions): {
       });
     }
     return out;
-  }, [history, fensAtPly, evalCache, ready, explorerCache]);
+  }, [history, fensAtPly, evalCache, ready, bookCache]);
 
   const summary = useMemo(() => {
     const acc: Record<MoveTag, number> = {
