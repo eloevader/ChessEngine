@@ -1327,19 +1327,9 @@ function App() {
     <div
       className={`app ${isReviewMode ? 'review-mode' : ''} ${boardFullscreen ? 'board-fullscreen' : ''}`}
     >
-      {/* === Top navigation bar (chess.com style) === */}
+      {/* === Top bar: game title only === */}
       <header className="cc-topbar">
-        <div className="cc-topbar-left">
-          <button
-            className="cc-icon-btn"
-            onClick={onFlip}
-            title="Flip the board"
-            aria-label="Flip the board"
-          >
-            <span className="icon-font-chess repeat" />
-          </button>
-        </div>
-
+        <div className="cc-topbar-left" />
         <div className="cc-topbar-center">
           <div className="cc-game-title">
             {lichessHeaders?.White && lichessHeaders?.Black ? (
@@ -1369,47 +1359,7 @@ function App() {
             )}
           </div>
         </div>
-
         <div className="cc-topbar-right">
-          <button
-            className="cc-icon-btn"
-            onClick={() => setBoardFullscreen((v) => !v)}
-            title={boardFullscreen ? 'Exit fullscreen' : 'Expand board to fullscreen'}
-            aria-label="Toggle board fullscreen"
-          >
-            {boardFullscreen ? '⤡' : '⤢'}
-          </button>
-          {!isLivePlay && (
-            <button
-              className="cc-topbar-btn"
-              onClick={() => setNewGameOpen(true)}
-            >
-              New Game
-            </button>
-          )}
-          {!isLivePlay && (
-            <button
-              className="cc-topbar-btn"
-              onClick={() => setLichessOpen(true)}
-              title="Import a game from Lichess"
-            >
-              <span className="icon-font-chess lichess" aria-hidden="true">🦊</span> Import
-            </button>
-          )}
-          {isLivePlay && (
-            <button
-              className="cc-topbar-btn"
-              onClick={onUndo}
-              disabled={
-                settings.gameMode !== 'computer' ||
-                fullHistory.length === 0 ||
-                animatingMove !== null ||
-                isGameEnded
-              }
-            >
-              Undo
-            </button>
-          )}
           <button
             className="cc-topbar-btn primary"
             onClick={() => setSettingsOpen(true)}
@@ -1547,6 +1497,64 @@ function App() {
               data-status={statusText}
             >
               {statusText}
+            </div>
+
+            {/* Board toolbar: game actions + arrow controls */}
+            <div className="cc-board-toolbar">
+              <div className="cc-toolbar-row">
+                <button className="cc-tool-btn" onClick={onFlip} title="Flip the board">
+                  <span className="icon-font-chess repeat" /> Flip
+                </button>
+                <button
+                  className="cc-tool-btn"
+                  onClick={() => setBoardFullscreen((v) => !v)}
+                  title={boardFullscreen ? 'Exit fullscreen' : 'Expand board'}
+                >
+                  {boardFullscreen ? '⤡' : '⤢'} Fullscreen
+                </button>
+                {!isLivePlay && (
+                  <button className="cc-tool-btn" onClick={() => setNewGameOpen(true)}>
+                    New Game
+                  </button>
+                )}
+                {!isLivePlay && (
+                  <button className="cc-tool-btn" onClick={() => setLichessOpen(true)} title="Import a game from Lichess">
+                    <span className="icon-font-chess lichess" aria-hidden="true">🦊</span> Lichess
+                  </button>
+                )}
+                {isLivePlay && (
+                  <button
+                    className="cc-tool-btn"
+                    onClick={onUndo}
+                    disabled={settings.gameMode !== 'computer' || fullHistory.length === 0 || animatingMove !== null || isGameEnded}
+                  >
+                    Undo
+                  </button>
+                )}
+              </div>
+              <div className="cc-toolbar-row">
+                <span className="cc-arrow-label">ARROW</span>
+                {(['green', 'red', 'yellow', 'blue'] as ArrowColor[]).map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    className={`cc-arrow-swatch cc-arrow-${c}${arrowColor === c ? ' selected' : ''}`}
+                    aria-label={`${c} arrow`}
+                    title={`${c[0].toUpperCase()}${c.slice(1)} arrow`}
+                    onClick={() => setArrowColor(c)}
+                  />
+                ))}
+                <button
+                  type="button"
+                  className="cc-arrow-clear"
+                  onClick={onClearArrows}
+                  disabled={arrows.length === 0}
+                  title="Clear all arrows (Esc)"
+                >
+                  Clear
+                </button>
+                <span className="cc-arrow-hint">Right-click + drag on the board to draw</span>
+              </div>
             </div>
           </div>
 
@@ -1689,29 +1697,6 @@ function App() {
             )}
 
             <div className="cc-sidebar-footer">
-              <div className="cc-arrow-toolbar">
-                <span className="cc-arrow-label">ARROW</span>
-                {(['green', 'red', 'yellow', 'blue'] as ArrowColor[]).map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    className={`cc-arrow-swatch cc-arrow-${c}${arrowColor === c ? ' selected' : ''}`}
-                    aria-label={`${c} arrow`}
-                    title={`${c[0].toUpperCase()}${c.slice(1)} arrow`}
-                    onClick={() => setArrowColor(c)}
-                  />
-                ))}
-                <button
-                  type="button"
-                  className="cc-arrow-clear"
-                  onClick={onClearArrows}
-                  disabled={arrows.length === 0}
-                  title="Clear all arrows (Esc)"
-                >
-                  Clear
-                </button>
-              </div>
-
               {isLivePlay && !isGameEnded && (
                 <div className="cc-game-actions">
                   {canResign && (

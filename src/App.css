@@ -321,6 +321,48 @@ body {
   font-weight: 700;
 }
 
+/* Board toolbar — appears below the status pill, centered
+   within the board column. */
+.cc-board-toolbar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  width: 100%;
+  max-width: min(85vh, 720px);
+}
+.cc-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.cc-tool-btn {
+  background: var(--cc-bg-elev-2);
+  border: 1px solid var(--cc-border-subtle);
+  color: var(--cc-text);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background var(--cc-transition), border-color var(--cc-transition);
+}
+.cc-tool-btn:hover { background: var(--cc-bg-elev-3); border-color: var(--cc-border-strong); }
+.cc-tool-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.cc-arrow-hint {
+  font-size: 11px;
+  color: var(--cc-text-dim);
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
 /* ============================================================
    Right sidebar (move list, analysis, move times)
    ============================================================ */
