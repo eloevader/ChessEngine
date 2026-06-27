@@ -254,7 +254,37 @@ body {
   text-align: center;
   transition: background 0.2s, border 0.2s;
   font-size: 14px;
+  /* Fixed height so the bar never resizes when the underlying text
+   * changes (e.g. player names, opening names). Prevents the board
+   * from shifting vertically on every move. */
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
 }
+
+/* Secondary status line above the status bar. Holds player
+ * names, opening name, engine status, pre-move status, etc.
+ * Hidden when empty so it doesn't take up space. */
+.status-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--text-dim);
+  min-height: 0;
+  margin: 0 0 4px 0;
+  flex-shrink: 0;
+}
+.status-meta:empty { display: none; }
+.meta-info { white-space: nowrap; }
+.meta-rating { color: var(--text-dim); font-size: 10px; }
 .status-bar[data-status='check'] {
   color: #ff9b9b;
   border-color: #b94a4a;

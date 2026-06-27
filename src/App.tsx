@@ -1213,38 +1213,33 @@ function App() {
         ? -engine.scoreMate
         : engine.scoreMate;
 
+  // Compact status text. Just the side-to-move and a short
+  // game-end summary. Player names, ratings, and opening names
+  // are surfaced in the side-panel move list header so the status
+  // bar can stay a single fixed-height line.
   const statusText = (() => {
-    if (gameEndReason?.kind === 'draw') return 'Draw by agreement';
+    if (gameEndReason?.kind === 'draw') return 'Draw';
     if (gameEndReason?.kind === 'resign') {
-      return `${gameEndReason.side === 'w' ? 'White' : 'Black'} resigns — ${
-        gameEndReason.side === 'w' ? 'Black' : 'White'
-      } wins`;
+      return `${gameEndReason.side === 'w' ? 'White' : 'Black'} resigns`;
     }
     if (clockEnabled && clock.winner) {
-      return `Time — ${clock.winner === 'w' ? 'White' : 'Black'} wins on time`;
+      return `${clock.winner === 'w' ? 'White' : 'Black'} wins on time`;
     }
     if (snapshot.isCheckmate) {
       return `Checkmate — ${snapshot.turn === 'w' ? 'Black' : 'White'} wins`;
     }
-    if (snapshot.isStalemate) return 'Stalemate — Draw';
-    if (snapshot.isInsufficientMaterial) return 'Draw — Insufficient material';
-    if (snapshot.isThreefoldRepetition) return 'Draw — Threefold repetition';
+    if (snapshot.isStalemate) return 'Stalemate';
     if (snapshot.isDraw) return 'Draw';
     if (drawOffer && settings.gameMode === 'local') {
       return `${drawOffer === 'w' ? 'White' : 'Black'} offers a draw`;
     }
     if (settings.gameMode === 'analysis') {
-      return `${snapshot.turn === 'w' ? 'White' : 'Black'} to move • Analysis`;
+      return `${snapshot.turn === 'w' ? 'White' : 'Black'} to move`;
     }
     if (settings.gameMode === 'computer' && engineSide !== null) {
-      const human = engineSide === 'w' ? 'Black' : 'White';
-      const eng = engineSide === 'w' ? 'White (Engine)' : 'Black (Engine)';
-      if (snapshot.inCheck) {
-        return `${snapshot.turn === 'w' ? human : eng} to move — Check`;
-      }
-      return `${snapshot.turn === engineSide ? eng : human} to move`;
+      const side = snapshot.turn === engineSide ? 'Computer' : 'You';
+      return `${side} to move`;
     }
-    if (snapshot.inCheck) return `${snapshot.turn === 'w' ? 'White' : 'Black'} to move — Check`;
     return `${snapshot.turn === 'w' ? 'White' : 'Black'} to move`;
   })();
 
@@ -1260,50 +1255,61 @@ function App() {
           <header className="app-header">
             <h1>Chess Analyzer <span className="beta-tag">beta</span></h1>
           </header>
-          <div className="status-bar" data-status={snapshot.inCheck ? 'check' : ''}>
-            {statusText}
+          {/* Meta line: player names, opening name, bulk analysis
+           *  progress, pre-move status, engine status. This row
+           *  is hidden when empty so it doesn't affect layout. */}
+          <div className="status-meta">
             {lichessHeaders?.White && lichessHeaders?.Black && (
-              <span className="lichess-info">
-                {' • '}
-                {lichessHeaders.White} vs {lichessHeaders.Black}
-                {lichessHeaders.Opening ? ` (${lichessHeaders.Opening})` : ''}
+              <span className="meta-info">
+                {lichessHeaders.White}
+                {lichessHeaders.whiteRating && (
+                  <span className="meta-rating"> ({lichessHeaders.whiteRating})</span>
+                )}
+                {' vs '}
+                {lichessHeaders.Black}
+                {lichessHeaders.blackRating && (
+                  <span className="meta-rating"> ({lichessHeaders.blackRating})</span>
+                )}
                 {lichessHeaders.Result ? ` — ${lichessHeaders.Result}` : ''}
               </span>
             )}
-            {moveClassifications.openingName && (
-              <span className="lichess-info">
-                {' • '}{moveClassifications.openingName}
+            {(lichessHeaders?.Opening || moveClassifications.openingName) && (
+              <span className="meta-info">
+                {lichessHeaders?.Opening ?? moveClassifications.openingName}
               </span>
             )}
             {moveClassifications.bulkLoading && (
-              <span className="lichess-info">
-                {' • analyzing '}
-                {moveClassifications.evaluatedPlies}/
+              <span className="meta-info">
+                analyzing {moveClassifications.evaluatedPlies}/
                 {moveClassifications.totalPlies}…
               </span>
             )}
             {preMovesEnabled && queuedCount > 0 && (
-              <span className="lichess-info">
-                {' • pre-move'}{queuedCount > 1 ? 's' : ''} queued
-                {queuedCount > 1 ? ` (${queuedCount})` : ''}: {preMoveQueue.map((m) => `${m.from}→${m.to}`).join(', ')}
+              <span className="meta-info">
+                pre-move{queuedCount > 1 ? 's' : ''} queued
+                {queuedCount > 1 ? ` (${queuedCount})` : ''}:{' '}
+                {preMoveQueue.map((m) => `${m.from}→${m.to}`).join(', ')}
                 {pendingPreMoveFrom && ` (+ ${pendingPreMoveFrom}→?)`}
               </span>
             )}
             {preMovesEnabled && queuedCount === 0 && pendingPreMoveFrom && (
-              <span className="lichess-info">
-                {' • click a destination for your pre-move (from '}
-                {pendingPreMoveFrom}{')'}
+              <span className="meta-info">
+                pre-move from {pendingPreMoveFrom} — pick a destination
               </span>
             )}
-            {settings.gameMode === 'computer' && engine.status === 'thinking' && ' • thinking…'}
-            {settings.gameMode === 'computer' && engine.status === 'loading' && (
-              <span className="status-error">
-                {' • engine offline — run: node scripts/stockfish-bridge.js'}
-              </span>
-            )}
-            {engine.status === 'error' && engine.error && (
-              <span className="status-error"> • engine error: {engine.error}</span>
-            )}
+            {settings.gameMode === 'computer' &&
+              engine.status === 'thinking' && (
+                <span className="meta-info">engine thinking…</span>
+              )}
+            {settings.gameMode === 'computer' &&
+              engine.status === 'loading' && (
+                <span className="meta-info status-error">
+                  engine offline — run: node scripts/stockfish-bridge.js
+                </span>
+              )}
+          </div>
+          <div className="status-bar" data-status={snapshot.inCheck ? 'check' : ''}>
+            {statusText}
           </div>
           <CapturedRow captures={captures} side={topSide} />
           {clockEnabled && (
