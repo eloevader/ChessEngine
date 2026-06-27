@@ -63,12 +63,28 @@ export class WasmStockfishEngine {
 
   private async _init(): Promise<void> {
     try {
+      if (typeof SharedArrayBuffer !== 'function') {
+        throw new Error(
+          'SharedArrayBuffer is not available. The WASM engine requires ' +
+          'Cross-Origin-Embedder-Policy: require-corp and ' +
+          'Cross-Origin-Opener-Policy: same-origin headers. ' +
+          'Switch to "Local bridge" or add the required headers.'
+        );
+      }
+
       await ensureScriptLoaded();
       while (typeof Stockfish === 'undefined') {
         await new Promise((r) => setTimeout(r, 50));
       }
       this.sf = Stockfish();
-      await this.sf.ready;
+
+      // Safety timeout: if the wasm module never initializes (e.g. missing
+      // headers, CORS issue), don't hang forever.
+      const readyTimeout = new Promise<void>((_, reject) =>
+        setTimeout(() => reject(new Error('Stockfish.wasm initialization timed out after 10s')), 10000)
+      );
+      await Promise.race([this.sf.ready, readyTimeout]);
+
       this.sf.addMessageListener((line: string) => this.processLine(line));
       this.sf.postMessage('uci');
     } catch (err) {
