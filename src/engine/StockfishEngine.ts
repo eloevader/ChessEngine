@@ -234,29 +234,39 @@ export class StockfishEngine {
   async evalOnce(
     fen: string,
     movetime: number,
-  ): Promise<{ bestMove: string; scoreCp: number | null; scoreMate: number | null }> {
+    multiPv: number = 1,
+  ): Promise<{ bestMove: string; scoreCp: number | null; scoreMate: number | null; lines?: EngineLine[] }> {
     await this.init();
     await this.stop();
     return new Promise((resolve) => {
       let resolved = false;
+      const allLines: EngineLine[] = [];
       const off = this.onMessage((msg) => {
         if (msg.type === 'info' && msg.lines.length > 0) {
-          const pv1 = msg.lines.find((l) => l.multipv === 1) ?? msg.lines[0];
-          // Stash the latest info; resolve when bestmove arrives.
-          latestInfo = { pv1 };
+          // Update the live set of lines.
+          for (const l of msg.lines) {
+            const existing = allLines.findIndex((e) => e.multipv === l.multipv);
+            if (existing >= 0) allLines[existing] = l;
+            else allLines.push(l);
+          }
         } else if (msg.type === 'bestmove') {
           if (resolved) return;
           resolved = true;
           off();
+          const pv1 =
+            allLines.find((l) => l.multipv === 1) ?? allLines[0] ?? null;
           resolve({
             bestMove: msg.move,
-            scoreCp: latestInfo?.pv1?.scoreCp ?? null,
-            scoreMate: latestInfo?.pv1?.scoreMate ?? null,
+            scoreCp: pv1?.scoreCp ?? null,
+            scoreMate: pv1?.scoreMate ?? null,
+            lines: multiPv > 1 ? allLines : undefined,
           });
         }
       });
-      let latestInfo: { pv1: { scoreCp: number | null; scoreMate: number | null; pv: string[] } } | null = null;
       this.setPosition(fen).catch(() => {});
+      if (multiPv > 1) {
+        this.sendRaw(`setoption name MultiPV value ${multiPv}`);
+      }
       this.sendRaw(`go movetime ${movetime}`);
       // Safety timeout: if bestmove never comes (e.g. bridge
       // offline), resolve with a best-effort fallback.
@@ -264,10 +274,13 @@ export class StockfishEngine {
         if (resolved) return;
         resolved = true;
         off();
+        const pv1 =
+          allLines.find((l) => l.multipv === 1) ?? allLines[0] ?? null;
         resolve({
-          bestMove: latestInfo?.pv1?.pv?.[0] ?? '',
-          scoreCp: latestInfo?.pv1?.scoreCp ?? null,
-          scoreMate: latestInfo?.pv1?.scoreMate ?? null,
+          bestMove: pv1?.pv?.[0] ?? '',
+          scoreCp: pv1?.scoreCp ?? null,
+          scoreMate: pv1?.scoreMate ?? null,
+          lines: multiPv > 1 ? allLines : undefined,
         });
       }, movetime + 1500);
     });

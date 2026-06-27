@@ -19,7 +19,6 @@
 //      is cached).
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Chess } from 'chess.js';
 import {
   classifyMove,
   isBookMove,
@@ -32,18 +31,28 @@ import {
   loadBook,
   lookupBook,
 } from './openingBook';
+import { Chess } from 'chess.js';
+import type { EngineLine } from '../engine/StockfishEngine';
 
 interface UseMoveClassificationOptions {
   history: string[];
   evaluate: (
     fen: string,
-  ) => Promise<{ bestMove: string; scoreCp: number | null; scoreMate: number | null }>;
+    multiPv?: number,
+  ) => Promise<{
+    bestMove: string;
+    scoreCp: number | null;
+    scoreMate: number | null;
+    lines?: EngineLine[];
+  }>;
   viewPly: number;
   enabled: boolean;
   /** When true (review mode), evaluate all plies up front so the
    *  user can navigate instantly. When false (analysis), evaluate
    *  lazily as the user navigates. */
   bulk: boolean;
+  /** Number of best lines to request from Stockfish (1, 2, or 3). */
+  lineCount: number;
   /** Called whenever a single ply's eval completes (so the caller
    *  can persist it or trigger a re-render). */
   onPlyEvaluated?: (ply: number) => void;
@@ -61,8 +70,11 @@ export function useMoveClassification(opts: UseMoveClassificationOptions): {
   totalPlies: number;
   /** Opening name for the current position, if any. */
   openingName: string | null;
+  /** Per-ply principal variations (top N lines from Stockfish).
+   *  Used to draw analysis arrows on the board. */
+  linesByPly: Map<number, EngineLine[]>;
 } {
-  const { history, evaluate, viewPly, enabled, bulk, onPlyEvaluated } = opts;
+  const { history, evaluate, viewPly, enabled, bulk, lineCount, onPlyEvaluated } = opts;
 
   // Per-ply raw eval cache.
   const [evalCache, setEvalCache] = useState<Map<number, MoveEval>>(new Map());
@@ -75,6 +87,10 @@ export function useMoveClassification(opts: UseMoveClassificationOptions): {
   // Per-ply opening-book cache. The book is loaded once at the
   // start of the session; we look up each ply's FEN locally.
   const [bookCache, setBookCache] = useState<Map<number, string | null>>(
+    new Map(),
+  );
+  // Per-ply principal variations (top N lines from Stockfish).
+  const [linesByPly, setLinesByPly] = useState<Map<number, EngineLine[]>>(
     new Map(),
   );
   const bookCacheRef = useRef<Map<number, string | null>>(bookCache);
@@ -94,11 +110,29 @@ export function useMoveClassification(opts: UseMoveClassificationOptions): {
     setEvalCache(new Map());
     setReady(new Set());
     setBookCache(new Map());
+    setLinesByPly(new Map());
     setOpeningName(null);
     setEvaluatedPlies(0);
   }, [history.length === 0]);
 
-  // FENs at each ply.
+  // Eagerly load the opening book on mount. The book is ~875KB so
+  // loading it once here (and on enabled=true) means the lazy /
+  // bulk paths can look up positions synchronously.
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    loadBook().then((b) => {
+      if (cancelled) return;
+      setBook(b);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled]);
+
+  // FENs at each ply (the position AFTER move ply N). We replay
+  // the SAN history from the initial position to compute the FEN
+  // for every ply.
   const fensAtPly = useMemo(() => {
     const fens: string[] = [];
     const c = new Chess();
@@ -113,6 +147,20 @@ export function useMoveClassification(opts: UseMoveClassificationOptions): {
     }
     return fens;
   }, [history]);
+
+  // Update the displayed opening name whenever the user navigates
+  // and the book is loaded. The bulk and lazy paths also do this,
+  // but having a dedicated effect makes sure the name is always
+  // current even when the eval cache hasn't changed.
+  useEffect(() => {
+    if (!book || viewPly <= 0 || viewPly > history.length) {
+      setOpeningName(null);
+      return;
+    }
+    const fen = fensAtPly[viewPly];
+    if (!fen) return;
+    setOpeningName(lookupBook(book, fen));
+  }, [book, viewPly, history.length, fensAtPly]);
 
   // -------- Bulk pre-pass (review mode) --------
   // When `bulk` is true, evaluate plies 0..history.length
@@ -146,7 +194,7 @@ export function useMoveClassification(opts: UseMoveClassificationOptions): {
         if (!fen) continue;
         setLoading(true);
         try {
-          const { bestMove, scoreCp } = await evaluate(fen);
+          const { bestMove, scoreCp, lines } = await evaluate(fen, lineCount);
           if (cancelled) return;
           setEvalCache((prev) => {
             const next = new Map(prev);
@@ -168,6 +216,14 @@ export function useMoveClassification(opts: UseMoveClassificationOptions): {
             });
             return next;
           });
+          // Persist the principal variations for this ply.
+          if (lines && lines.length > 0) {
+            setLinesByPly((prev) => {
+              const next = new Map(prev);
+              next.set(ply, lines);
+              return next;
+            });
+          }
           // Look up the opening name from the local book. If the
           // book hasn't loaded yet, we kick off the load here.
           const lookupName = (b: Map<string, string> | null) => {
@@ -198,6 +254,14 @@ export function useMoveClassification(opts: UseMoveClassificationOptions): {
               return next;
             });
             if (ply === viewPly) setOpeningName(name);
+          }
+          // Persist the principal variations for this ply.
+          if (lines && lines.length > 0) {
+            setLinesByPly((prev) => {
+              const next = new Map(prev);
+              next.set(ply, lines);
+              return next;
+            });
           }
           setEvaluatedPlies((n) => n + 1);
           onPlyEvaluated?.(ply);
@@ -239,7 +303,7 @@ export function useMoveClassification(opts: UseMoveClassificationOptions): {
           tasks.push(
             (async () => {
               try {
-                const { bestMove, scoreCp } = await evaluate(fen);
+                const { bestMove, scoreCp, lines } = await evaluate(fen, lineCount);
                 if (cancelled) return;
                 setEvalCache((prev) => {
                   const next = new Map(prev);
@@ -261,6 +325,14 @@ export function useMoveClassification(opts: UseMoveClassificationOptions): {
                   });
                   return next;
                 });
+                // Persist the principal variations for this ply.
+                if (lines && lines.length > 0) {
+                  setLinesByPly((prev) => {
+                    const next = new Map(prev);
+                    next.set(ply, lines);
+                    return next;
+                  });
+                }
                 onPlyEvaluated?.(ply);
               } catch {
                 /* ignore */
@@ -313,9 +385,13 @@ export function useMoveClassification(opts: UseMoveClassificationOptions): {
       const isMating = san.includes('#');
       const plyReady = ready.has(ply);
       // Opening name from the local book (looked up by the FEN of
-      // the position AFTER the move).
-      const bookName = bookCache.get(ply);
-      const hardcodedBook = isBookMove(history.slice(0, ply));
+      // the position AFTER the move). We only consider a move a
+      // "book" move within the first 25 plies of the game — after
+      // that, the position may still exist in the book DB (the
+      // book contains lots of mid-game positions that happen to be
+      // popular), but calling them "book" is misleading.
+      const bookName = ply <= 25 ? bookCache.get(ply) : null;
+      const hardcodedBook = ply <= 25 ? isBookMove(history.slice(0, ply)) : { inBook: false, opening: null };
       const inBook = bookName != null || hardcodedBook.inBook;
       const bookOpening = bookName ?? hardcodedBook.opening ?? null;
       const book = { inBook, opening: bookOpening };
@@ -381,5 +457,7 @@ export function useMoveClassification(opts: UseMoveClassificationOptions): {
     evaluatedPlies,
     totalPlies,
     openingName,
+    linesByPly,
   };
 }
+

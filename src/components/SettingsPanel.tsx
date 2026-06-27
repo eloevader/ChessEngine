@@ -342,6 +342,24 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                 onChange={(e) => updateDraft({ showAnalysisLines: e.target.checked })}
               />
             </div>
+            {draft.showAnalysisLines && (
+              <div className="setting-row">
+                <label>Number of best lines</label>
+                <div className="seg-group">
+                  {[1, 2, 3].map((n) => (
+                    <button
+                      key={n}
+                      className={`seg ${draft.analysisLineCount === n ? 'selected' : ''}`}
+                      onClick={() =>
+                        updateDraft({ analysisLineCount: n as 1 | 2 | 3 })
+                      }
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
 
           <div className="settings-footer">

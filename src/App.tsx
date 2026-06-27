@@ -221,7 +221,6 @@ function App() {
   );
   const threatArrows: Arrow[] = liveAttacks.arrows;
   const attackDescriptions: AttackDescription[] = liveAttacks.descriptions;
-  const allArrows = useMemo(() => [...threatArrows, ...arrows], [threatArrows, arrows]);
   const board = useMemo(() => buildBoard(fen), [fen]);
 
   // Move classification: only enabled in analysis / review. In live
@@ -235,7 +234,53 @@ function App() {
     viewPly,
     enabled: settings.gameMode === 'analysis' || reviewing,
     bulk: reviewing,
+    lineCount: settings.showAnalysisLines ? settings.analysisLineCount : 1,
   });
+
+  // Convert the engine's top-N principal variations at the current
+  // viewPly into arrows drawn on the board. Each PV is a list of
+  // moves in UCI (e2e4, e7e5, ...) — we turn them into (from→to)
+  // arrows. The best line uses blue (chess.com-style), 2nd is
+  // yellow, 3rd is red.
+  const analysisArrows = useMemo<Arrow[]>(() => {
+    if (
+      !settings.showAnalysisLines ||
+      !moveClassifications.linesByPly.has(viewPly)
+    ) {
+      return [];
+    }
+    const lines = moveClassifications.linesByPly.get(viewPly) ?? [];
+    const colors: ArrowColor[] = ['blue', 'yellow', 'red'];
+    const out: Arrow[] = [];
+    for (let i = 0; i < Math.min(lines.length, settings.analysisLineCount); i++) {
+      const line = lines[i];
+      const uci = line.pv;
+      for (let j = 0; j < uci.length - 1; j += 1) {
+        const move = uci[j];
+        if (move.length < 4) continue;
+        const from = move.slice(0, 2) as Square;
+        const to = move.slice(2, 4) as Square;
+        out.push({
+          from,
+          to,
+          color: colors[i] ?? 'white',
+          weight: i === 0 ? 'thick' : 'normal',
+          auto: true,
+        });
+      }
+    }
+    return out;
+  }, [
+    moveClassifications.linesByPly,
+    viewPly,
+    settings.showAnalysisLines,
+    settings.analysisLineCount,
+  ]);
+
+  const allArrows = useMemo(
+    () => [...threatArrows, ...arrows, ...analysisArrows],
+    [threatArrows, arrows, analysisArrows],
+  );
 
   // Per-square map of move annotations for the move the user is
   // currently viewing. Keyed by the move's destination square (the

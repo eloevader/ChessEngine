@@ -12,11 +12,17 @@ export interface UseEngineReturn {
   scoreMate: number | null;
   bestMove: string | null;
   requestEval: (fen: string, level: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8) => void;
-  /** One-shot evaluation of an arbitrary FEN. */
-  evalPosition: (fen: string) => Promise<{
+  /** One-shot evaluation of an arbitrary FEN. When `multiPv` is
+   *  greater than 1, the returned `lines` contains the top N
+   *  principal variations from Stockfish. */
+  evalPosition: (
+    fen: string,
+    multiPv?: number,
+  ) => Promise<{
     bestMove: string;
     scoreCp: number | null;
     scoreMate: number | null;
+    lines?: import('./StockfishEngine').EngineLine[];
   }>;
   stop: () => void;
   clearBestMove: () => void;
@@ -83,13 +89,17 @@ export function useEngine(): UseEngineReturn {
   }, []);
 
   const startEngineEval = useCallback(
-    async (fen: string, level: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8) => {
+    async (
+      fen: string,
+      level: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8,
+      multiPv: number = 1,
+    ) => {
       const e = engineRef.current;
       if (!e) return;
       try {
         await e.setPosition(fen);
         setStatus('thinking');
-        await e.go({ level });
+        await e.go({ level, multiPv });
       } catch {
         // ignored; the engine emits its own error events
       }
@@ -108,10 +118,16 @@ export function useEngine(): UseEngineReturn {
   );
 
   const evalPosition = useCallback(
-    (fen: string) => {
+    (fen: string, multiPv: number = 1) => {
       const e = engineRef.current;
-      if (!e) return Promise.resolve({ bestMove: '', scoreCp: null, scoreMate: null });
-      return e.evalOnce(fen, 250);
+      if (!e) {
+        return Promise.resolve({
+          bestMove: '',
+          scoreCp: null,
+          scoreMate: null,
+        });
+      }
+      return e.evalOnce(fen, 250, multiPv);
     },
     [],
   );

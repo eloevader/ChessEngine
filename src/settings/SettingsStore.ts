@@ -32,6 +32,10 @@ export interface Settings {
   evalBarEnabled: boolean;
   evalBarPosition: EvalBarPosition;
   showAnalysisLines: boolean;
+  /** Number of best lines to show as arrows on the board during
+   *  analysis (1 = single best, 2 = top 2, 3 = top 3). Requires
+   *  `showAnalysisLines` to be true. */
+  analysisLineCount: 1 | 2 | 3;
   showThreats: boolean;
   /** Which threats to show when showThreats is on. 'lastMove' = only the
    *  piece that just moved. 'board' = every attack by either side. */
@@ -41,7 +45,7 @@ export interface Settings {
   moveNotationOnBoard: boolean;
 }
 
-const STORAGE_KEY = 'chess-analyzer.settings.v7';
+const STORAGE_KEY = 'chess-analyzer.settings.v8';
 // Older keys we may have used previously. We don't read from them, but we
 // delete them on load so users who upgrade don't get stuck on stale settings.
 const LEGACY_STORAGE_KEYS = [
@@ -51,6 +55,7 @@ const LEGACY_STORAGE_KEYS = [
   'chess-analyzer.settings.v4',
   'chess-analyzer.settings.v5',
   'chess-analyzer.settings.v6',
+  'chess-analyzer.settings.v7',
 ];
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -77,6 +82,7 @@ export const DEFAULT_SETTINGS: Settings = {
   evalBarEnabled: true,
   evalBarPosition: 'left',
   showAnalysisLines: false,
+  analysisLineCount: 2,
   showThreats: true,
   threatScope: 'lastMove',
   moveNotationOnBoard: true,
