@@ -3,12 +3,13 @@ import { LEVEL_CONFIG } from './StockfishEngine';
 
 const STOCKFISH_JS = '/ChessEngine/stockfish/stockfish.js';
 
-declare const Stockfish: () => Promise<{
+declare const Stockfish: () => {
+  ready: Promise<void>;
   addMessageListener: (fn: (line: string) => void) => void;
   removeMessageListener: (fn: (line: string) => void) => void;
   postMessage: (cmd: string) => void;
   terminate: () => void;
-}>;
+};
 
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -33,7 +34,7 @@ function ensureScriptLoaded(): Promise<void> {
 }
 
 export class WasmStockfishEngine {
-  private sf: Awaited<ReturnType<typeof Stockfish>> | null = null;
+  private sf: ReturnType<typeof Stockfish> | null = null;
   private ready = false;
   private listeners: EngineListener[] = [];
   private initPromise: Promise<void> | null = null;
@@ -66,7 +67,8 @@ export class WasmStockfishEngine {
       while (typeof Stockfish === 'undefined') {
         await new Promise((r) => setTimeout(r, 50));
       }
-      this.sf = await Stockfish();
+      this.sf = Stockfish();
+      await this.sf.ready;
       this.sf.addMessageListener((line: string) => this.processLine(line));
       this.sf.postMessage('uci');
     } catch (err) {

@@ -105,7 +105,7 @@ export function useMoveClassification(opts: UseMoveClassificationOptions): {
   // ref so the bulk effect can compare against it.
   const totalPlies = history.length;
 
-  // Reset caches when the history changes.
+  // Reset caches when the history changes to a new game.
   useEffect(() => {
     setEvalCache(new Map());
     setReady(new Set());
@@ -113,7 +113,7 @@ export function useMoveClassification(opts: UseMoveClassificationOptions): {
     setLinesByPly(new Map());
     setOpeningName(null);
     setEvaluatedPlies(0);
-  }, [history.length === 0]);
+  }, [history]);
 
   // Eagerly load the opening book on mount. The book is ~875KB so
   // loading it once here (and on enabled=true) means the lazy /
