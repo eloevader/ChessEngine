@@ -1,5 +1,5 @@
 import { useSettingsDraft } from '../settings/SettingsStore';
-import type { AnimationSpeed, AnimationStyle, SoundPack, CoordDisplay, EvalBarPosition, EngineMode } from '../settings/SettingsStore';
+import type { AnimationSpeed, AnimationStyle, SoundPack, CoordDisplay, EvalBarPosition } from '../settings/SettingsStore';
 import { BOARD_THEMES, getTheme } from '../chess/themes';
 import { PIECE_SETS, pieceImageUrl, type PieceSetId } from '../chess/pieces';
 
