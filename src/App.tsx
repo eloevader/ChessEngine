@@ -1327,9 +1327,13 @@ function App() {
     <div
       className={`app ${isReviewMode ? 'review-mode' : ''} ${boardFullscreen ? 'board-fullscreen' : ''}`}
     >
-      {/* === Top bar: game title only === */}
+      {/* === Top bar: game title + action buttons === */}
       <header className="cc-topbar">
-        <div className="cc-topbar-left" />
+        <div className="cc-topbar-left">
+          <button className="cc-icon-btn" onClick={onFlip} title="Flip the board">
+            <span className="icon-font-chess repeat" />
+          </button>
+        </div>
         <div className="cc-topbar-center">
           <div className="cc-game-title">
             {lichessHeaders?.White && lichessHeaders?.Black ? (
@@ -1360,11 +1364,23 @@ function App() {
           </div>
         </div>
         <div className="cc-topbar-right">
-          <button
-            className="cc-topbar-btn primary"
-            onClick={() => setSettingsOpen(true)}
-            aria-label="Open settings"
-          >
+          {!isLivePlay && (
+            <button className="cc-topbar-btn" onClick={() => setNewGameOpen(true)}>New Game</button>
+          )}
+          {!isLivePlay && (
+            <button className="cc-topbar-btn" onClick={() => setLichessOpen(true)} title="Import a game from Lichess">
+              <span className="icon-font-chess lichess" aria-hidden="true">🦊</span> Import
+            </button>
+          )}
+          <button className="cc-icon-btn" onClick={() => setBoardFullscreen((v) => !v)} title={boardFullscreen ? 'Exit fullscreen' : 'Expand board'}>
+            {boardFullscreen ? '⤡' : '⤢'}
+          </button>
+          {isLivePlay && (
+            <button className="cc-topbar-btn" onClick={onUndo} disabled={settings.gameMode !== 'computer' || fullHistory.length === 0 || animatingMove !== null || isGameEnded}>
+              Undo
+            </button>
+          )}
+          <button className="cc-topbar-btn primary" onClick={() => setSettingsOpen(true)} aria-label="Open settings">
             <span className="icon-font-chess circle-gearwheel" />
           </button>
         </div>
@@ -1498,266 +1514,126 @@ function App() {
             >
               {statusText}
             </div>
-
-            {/* Board toolbar: game actions + arrow controls */}
-            <div className="cc-board-toolbar">
-              <div className="cc-toolbar-row">
-                <button className="cc-tool-btn" onClick={onFlip} title="Flip the board">
-                  <span className="icon-font-chess repeat" /> Flip
-                </button>
-                <button
-                  className="cc-tool-btn"
-                  onClick={() => setBoardFullscreen((v) => !v)}
-                  title={boardFullscreen ? 'Exit fullscreen' : 'Expand board'}
-                >
-                  {boardFullscreen ? '⤡' : '⤢'} Fullscreen
-                </button>
-                {!isLivePlay && (
-                  <button className="cc-tool-btn" onClick={() => setNewGameOpen(true)}>
-                    New Game
-                  </button>
-                )}
-                {!isLivePlay && (
-                  <button className="cc-tool-btn" onClick={() => setLichessOpen(true)} title="Import a game from Lichess">
-                    <span className="icon-font-chess lichess" aria-hidden="true">🦊</span> Lichess
-                  </button>
-                )}
-                {isLivePlay && (
-                  <button
-                    className="cc-tool-btn"
-                    onClick={onUndo}
-                    disabled={settings.gameMode !== 'computer' || fullHistory.length === 0 || animatingMove !== null || isGameEnded}
-                  >
-                    Undo
-                  </button>
-                )}
-              </div>
-              <div className="cc-toolbar-row">
-                <span className="cc-arrow-label">ARROW</span>
-                {(['green', 'red', 'yellow', 'blue'] as ArrowColor[]).map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    className={`cc-arrow-swatch cc-arrow-${c}${arrowColor === c ? ' selected' : ''}`}
-                    aria-label={`${c} arrow`}
-                    title={`${c[0].toUpperCase()}${c.slice(1)} arrow`}
-                    onClick={() => setArrowColor(c)}
-                  />
-                ))}
-                <button
-                  type="button"
-                  className="cc-arrow-clear"
-                  onClick={onClearArrows}
-                  disabled={arrows.length === 0}
-                  title="Clear all arrows (Esc)"
-                >
-                  Clear
-                </button>
-                <span className="cc-arrow-hint">Right-click + drag on the board to draw</span>
-              </div>
-            </div>
           </div>
 
-          {/* === Right sidebar: tabs + content (chess.com style) === */}
+          {/* === Right sidebar === */}
           <aside className="cc-sidebar">
-            <div className="cc-sidebar-tabs" role="tablist">
-              <button
-                role="tab"
-                aria-selected={sidebarTab === 'moves'}
-                className={`cc-tab${sidebarTab === 'moves' ? ' active' : ''}`}
-                onClick={() => setSidebarTab('moves')}
-              >
-                Move list
-              </button>
-              <button
-                role="tab"
-                aria-selected={sidebarTab === 'analysis'}
-                className={`cc-tab${sidebarTab === 'analysis' ? ' active' : ''}`}
-                onClick={() => setSidebarTab('analysis')}
-              >
-                Analysis
-              </button>
-              <button
-                role="tab"
-                aria-selected={sidebarTab === 'times'}
-                className={`cc-tab${sidebarTab === 'times' ? ' active' : ''}`}
-                onClick={() => setSidebarTab('times')}
-              >
-                Move times
-              </button>
-            </div>
-
-            {sidebarTab === 'moves' && (
-              <div className="cc-sidebar-section cc-move-list">
-                <div className="cc-moves-nav">
-                  <button
-                    className="cc-nav-btn"
-                    onClick={onJumpStart}
-                    disabled={viewPly <= 0}
-                    aria-label="Jump to start"
-                    title="Jump to start"
-                  >
-                    ⏮
-                  </button>
-                  <button
-                    className="cc-nav-btn"
-                    onClick={onJumpBack}
-                    disabled={viewPly <= 0}
-                    aria-label="Step back"
-                    title="Step back (←)"
-                  >
-                    ◀
-                  </button>
-                  <button
-                    className="cc-nav-btn"
-                    onClick={onJumpForward}
-                    disabled={viewPly >= fullHistory.length}
-                    aria-label="Step forward"
-                    title="Step forward (→)"
-                  >
-                    ▶
-                  </button>
-                  <button
-                    className="cc-nav-btn"
-                    onClick={onJumpEnd}
-                    disabled={viewPly >= fullHistory.length}
-                    aria-label="Jump to end"
-                    title="Jump to end"
-                  >
-                    ⏭
-                  </button>
+            {fullHistory.length > 0 ? (
+              <>
+                <div className="cc-sidebar-tabs" role="tablist">
+                  <button role="tab" aria-selected={sidebarTab === 'moves'} className={`cc-tab${sidebarTab === 'moves' ? ' active' : ''}`} onClick={() => setSidebarTab('moves')}>Move list</button>
+                  <button role="tab" aria-selected={sidebarTab === 'analysis'} className={`cc-tab${sidebarTab === 'analysis' ? ' active' : ''}`} onClick={() => setSidebarTab('analysis')}>Analysis</button>
+                  <button role="tab" aria-selected={sidebarTab === 'times'} className={`cc-tab${sidebarTab === 'times' ? ' active' : ''}`} onClick={() => setSidebarTab('times')}>Move times</button>
                 </div>
-                <MoveHistory
-                  history={fullHistory}
-                  sanMoves={moveHistorySANS}
-                  currentPly={viewPly}
-                  onJumpTo={onJumpTo}
-                  onJumpStart={onJumpStart}
-                  onJumpBack={onJumpBack}
-                  onJumpForward={onJumpForward}
-                  onJumpEnd={onJumpEnd}
-                  classifications={moveClassifications.classifications}
-                  moveTimes={moveTimes}
-                  bulkProgress={
-                    moveClassifications.bulkLoading
-                      ? {
-                          done: moveClassifications.evaluatedPlies,
-                          total: moveClassifications.totalPlies,
-                        }
-                      : null
-                  }
-                />
-              </div>
-            )}
 
-            {sidebarTab === 'analysis' && (
-              <div className="cc-sidebar-section cc-analysis">
-                <div className="cc-engine-status">
-                  {engine.status === 'ready'
-                    ? `Engine ready · depth ${engine.bestLine?.depth ?? '—'}`
-                    : engine.status === 'thinking'
-                      ? 'Engine thinking…'
-                      : engine.status === 'error'
-                        ? 'Engine offline'
-                        : 'Engine idle'}
-                </div>
-                {engine.bestLine && engine.bestLine.pv.length > 0 && (
-                  <div className="cc-engine-line">
-                    <div className="cc-engine-line-label">Best line</div>
-                    <div className="cc-engine-line-pv">
-                      {engine.bestLine.pv.join(' ')}
+                {sidebarTab === 'moves' && (
+                  <div className="cc-sidebar-section cc-move-list">
+                    <div className="cc-moves-nav">
+                      <button className="cc-nav-btn" onClick={onJumpStart} disabled={viewPly <= 0} aria-label="Jump to start" title="Jump to start">⏮</button>
+                      <button className="cc-nav-btn" onClick={onJumpBack} disabled={viewPly <= 0} aria-label="Step back" title="Step back (←)">◀</button>
+                      <button className="cc-nav-btn" onClick={onJumpForward} disabled={viewPly >= fullHistory.length} aria-label="Step forward" title="Step forward (→)">▶</button>
+                      <button className="cc-nav-btn" onClick={onJumpEnd} disabled={viewPly >= fullHistory.length} aria-label="Jump to end" title="Jump to end">⏭</button>
                     </div>
+                    <MoveHistory history={fullHistory} sanMoves={moveHistorySANS} currentPly={viewPly} onJumpTo={onJumpTo} onJumpStart={onJumpStart} onJumpBack={onJumpBack} onJumpForward={onJumpForward} onJumpEnd={onJumpEnd} classifications={moveClassifications.classifications} moveTimes={moveTimes} bulkProgress={moveClassifications.bulkLoading ? { done: moveClassifications.evaluatedPlies, total: moveClassifications.totalPlies } : null} />
                   </div>
                 )}
-              </div>
-            )}
 
-            {sidebarTab === 'times' && (
-              <div className="cc-sidebar-section cc-times">
-                {moveTimes.length <= 1 ? (
-                  <div className="cc-empty">No time data — play a clocked game.</div>
-                ) : (
-                  <div className="cc-time-list">
-                    {moveTimes.slice(1).map((t, i) => (
-                      <div
-                        key={i}
-                        className={`cc-time-row ${i + 1 === viewPly ? 'current' : ''}`}
-                        onClick={() => jumpToPly(i + 1)}
-                      >
-                        <span className="cc-time-ply">
-                          {Math.floor(i / 2) + 1}
-                          {i % 2 === 0 ? '.' : '...'}
-                        </span>
-                        <span className="cc-time-secs">{t.toFixed(1)}s</span>
+                {sidebarTab === 'analysis' && (
+                  <div className="cc-sidebar-section cc-analysis">
+                    <div className="cc-engine-status">
+                      {engine.status === 'ready' ? `Engine ready · depth ${engine.bestLine?.depth ?? '—'}` : engine.status === 'thinking' ? 'Engine thinking…' : engine.status === 'error' ? 'Engine offline' : 'Engine idle'}
+                    </div>
+                    {engine.bestLine && engine.bestLine.pv.length > 0 && (
+                      <div className="cc-engine-line">
+                        <div className="cc-engine-line-label">Best line</div>
+                        <div className="cc-engine-line-pv">{engine.bestLine.pv.join(' ')}</div>
                       </div>
-                    ))}
+                    )}
                   </div>
                 )}
+
+                {sidebarTab === 'times' && (
+                  <div className="cc-sidebar-section cc-times">
+                    {moveTimes.length <= 1 ? (
+                      <div className="cc-empty">No time data — play a clocked game.</div>
+                    ) : (
+                      <div className="cc-time-list">
+                        {moveTimes.slice(1).map((t, i) => (
+                          <div key={i} className={`cc-time-row ${i + 1 === viewPly ? 'current' : ''}`} onClick={() => jumpToPly(i + 1)}>
+                            <span className="cc-time-ply">{Math.floor(i / 2) + 1}{i % 2 === 0 ? '.' : '...'}</span>
+                            <span className="cc-time-secs">{t.toFixed(1)}s</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="cc-sidebar-landing">
+                <div className="cc-landing-title">New Game</div>
+                <div className="cc-landing-modes">
+                  <button className="cc-landing-btn" onClick={() => { setNewGameOpen(true); }}>
+                    <span className="cc-landing-icon">👤</span>
+                    <span className="cc-landing-label">2 Players</span>
+                    <span className="cc-landing-hint">Play offline</span>
+                  </button>
+                  <button className="cc-landing-btn" onClick={() => { setNewGameOpen(true); }}>
+                    <span className="cc-landing-icon">🤖</span>
+                    <span className="cc-landing-label">vs Computer</span>
+                    <span className="cc-landing-hint">Stockfish engine</span>
+                  </button>
+                  <button className="cc-landing-btn" onClick={() => { setNewGameOpen(true); }}>
+                    <span className="cc-landing-icon">📊</span>
+                    <span className="cc-landing-label">Analysis</span>
+                    <span className="cc-landing-hint">No clock, no opponent</span>
+                  </button>
+                </div>
+                <div className="cc-landing-divider" />
+                <button className="cc-landing-import" onClick={() => setLichessOpen(true)}>
+                  <span className="icon-font-chess lichess" aria-hidden="true">🦊</span> Import from Lichess
+                </button>
+                <div className="cc-landing-divider" />
+                <button className="cc-landing-settings" onClick={() => setSettingsOpen(true)}>
+                  <span className="icon-font-chess circle-gearwheel" /> Game Settings
+                </button>
               </div>
             )}
 
-            <div className="cc-sidebar-footer">
-              {isLivePlay && !isGameEnded && (
-                <div className="cc-game-actions">
-                  {canResign && (
-                    <button className="cc-action-btn" onClick={onResign}>
-                      <span className="cc-action-icon">⚑</span> Resign
-                    </button>
-                  )}
-                  {canOfferDraw && (
-                    <button className="cc-action-btn" onClick={onOfferDraw}>
-                      🤝 Offer Draw
-                    </button>
-                  )}
+            {fullHistory.length > 0 && (
+              <div className="cc-sidebar-footer">
+                <div className="cc-arrow-toolbar">
+                  <span className="cc-arrow-label">ARROW</span>
+                  {(['green', 'red', 'yellow', 'blue'] as ArrowColor[]).map((c) => (
+                    <button key={c} type="button" className={`cc-arrow-swatch cc-arrow-${c}${arrowColor === c ? ' selected' : ''}`} aria-label={`${c} arrow`} title={`${c[0].toUpperCase()}${c.slice(1)} arrow`} onClick={() => setArrowColor(c)} />
+                  ))}
+                  <button type="button" className="cc-arrow-clear" onClick={onClearArrows} disabled={arrows.length === 0} title="Clear all arrows (Esc)">Clear</button>
                 </div>
-              )}
 
-              {isGameEnded && !isReviewMode && (
-                <button
-                  className="cc-review-btn"
-                  onClick={onReview}
-                >
-                  <span className="cc-action-icon">↻</span> Game Review
-                </button>
-              )}
-              {isReviewMode && (
-                <button className="cc-review-btn" onClick={onExitReview}>
-                  Back to result
-                </button>
-              )}
-
-              {preMovesEnabled && (queuedCount > 0 || pendingPreMoveFrom) && (
-                <div className="cc-premove-banner">
-                  {queuedCount > 0 ? (
-                    <span>
-                      Pre-move{queuedCount > 1 ? 's' : ''} queued
-                      {queuedCount > 1 ? ` (${queuedCount})` : ''}:{' '}
-                      {preMoveQueue.map((m) => `${m.from}→${m.to}`).join(', ')}
-                      {pendingPreMoveFrom && ` (+ ${pendingPreMoveFrom}→?)`}
-                      {' · right-click board to clear'}
-                    </span>
-                  ) : (
-                    <span>
-                      Pre-move from {pendingPreMoveFrom} — pick a destination (right-click to clear)
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {moveClassifications.bulkLoading && (
-                <div className="cc-premove-banner">
-                  Analyzing moves {moveClassifications.evaluatedPlies}/
-                  {moveClassifications.totalPlies}…
-                </div>
-              )}
-
-              {settings.gameMode === 'computer' &&
-                engine.status === 'loading' && (
-                  <div className="cc-premove-banner cc-status-error">
-                    Engine offline — run: node scripts/stockfish-bridge.js
+                {isLivePlay && !isGameEnded && (
+                  <div className="cc-game-actions">
+                    {canResign && <button className="cc-action-btn" onClick={onResign}><span className="cc-action-icon">⚑</span> Resign</button>}
+                    {canOfferDraw && <button className="cc-action-btn" onClick={onOfferDraw}>🤝 Offer Draw</button>}
                   </div>
                 )}
-            </div>
+
+                {isGameEnded && !isReviewMode && <button className="cc-review-btn" onClick={onReview}><span className="cc-action-icon">↻</span> Game Review</button>}
+                {isReviewMode && <button className="cc-review-btn" onClick={onExitReview}>Back to result</button>}
+
+                {preMovesEnabled && (queuedCount > 0 || pendingPreMoveFrom) && (
+                  <div className="cc-premove-banner">
+                    {queuedCount > 0 ? (
+                      <span>Pre-move{queuedCount > 1 ? 's' : ''} queued{queuedCount > 1 ? ` (${queuedCount})` : ''}: {preMoveQueue.map((m) => `${m.from}→${m.to}`).join(', ')}{pendingPreMoveFrom && ` (+ ${pendingPreMoveFrom}→?)`} · right-click board to clear</span>
+                    ) : (
+                      <span>Pre-move from {pendingPreMoveFrom} — pick a destination (right-click to clear)</span>
+                    )}
+                  </div>
+                )}
+
+                {moveClassifications.bulkLoading && <div className="cc-premove-banner">Analyzing moves {moveClassifications.evaluatedPlies}/{moveClassifications.totalPlies}…</div>}
+                {settings.gameMode === 'computer' && engine.status === 'loading' && <div className="cc-premove-banner cc-status-error">Engine offline — run: node scripts/stockfish-bridge.js</div>}
+              </div>
+            )}
           </aside>
         </div>
       </main>

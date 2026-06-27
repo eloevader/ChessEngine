@@ -321,47 +321,74 @@ body {
   font-weight: 700;
 }
 
-/* Board toolbar — appears below the status pill, centered
-   within the board column. */
-.cc-board-toolbar {
+/* ============================================================
+   Sidebar landing page (shown when no game is active)
+   ============================================================ */
+.cc-sidebar-landing {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-  width: 100%;
-  max-width: min(85vh, 720px);
-}
-.cc-toolbar-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
   justify-content: center;
+  padding: 40px 24px;
+  gap: 20px;
+  text-align: center;
 }
-.cc-tool-btn {
+.cc-landing-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--cc-text-bright);
+}
+.cc-landing-modes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 280px;
+}
+.cc-landing-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
   background: var(--cc-bg-elev-2);
   border: 1px solid var(--cc-border-subtle);
   color: var(--cc-text);
-  border-radius: 6px;
-  padding: 6px 10px;
-  font-size: 12px;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+  border-radius: 12px;
+  padding: 18px 12px;
   cursor: pointer;
   font-family: inherit;
-  transition: background var(--cc-transition), border-color var(--cc-transition);
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
 }
-.cc-tool-btn:hover { background: var(--cc-bg-elev-3); border-color: var(--cc-border-strong); }
-.cc-tool-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-.cc-arrow-hint {
-  font-size: 11px;
-  color: var(--cc-text-dim);
-  margin-left: 4px;
-  white-space: nowrap;
+.cc-landing-btn:hover { background: var(--cc-bg-elev-3); border-color: var(--cc-border-strong); transform: translateY(-1px); }
+.cc-landing-icon { font-size: 28px; margin-bottom: 2px; }
+.cc-landing-label { font-size: 15px; font-weight: 600; }
+.cc-landing-hint { font-size: 12px; color: var(--cc-text-dim); }
+.cc-landing-divider {
+  width: 100%;
+  max-width: 280px;
+  height: 1px;
+  background: var(--cc-border-subtle);
 }
+.cc-landing-import, .cc-landing-settings {
+  background: transparent;
+  border: 1px solid var(--cc-border-subtle);
+  color: var(--cc-text);
+  border-radius: 8px;
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  width: 100%;
+  max-width: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.cc-landing-import:hover, .cc-landing-settings:hover { background: var(--cc-bg-elev-3); border-color: var(--cc-border-strong); }
 
 /* ============================================================
    Right sidebar (move list, analysis, move times)
@@ -1110,25 +1137,27 @@ body {
 .settings-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.6);
   z-index: 200;
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: center;
 }
 .settings-panel {
   background: var(--cc-bg-elev-1);
-  border-left: 1px solid var(--cc-border);
-  width: min(420px, 100vw);
-  height: 100vh;
+  border: 1px solid var(--cc-border);
+  border-radius: 14px;
+  width: min(460px, 92vw);
+  max-height: 85vh;
   overflow: auto;
-  box-shadow: -10px 0 40px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
   display: flex;
   flex-direction: column;
-  animation: slidein 0.2s ease;
+  animation: fadeIn 0.15s ease;
 }
-@keyframes slidein {
-  from { transform: translateX(20px); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
 }
 .settings-header {
   display: flex;
@@ -1139,6 +1168,8 @@ body {
   position: sticky;
   top: 0;
   background: var(--cc-bg-elev-1);
+  border-radius: 14px 14px 0 0;
+  z-index: 1;
 }
 .settings-header h2 { margin: 0; font-size: 18px; color: var(--cc-text-bright); }
 .settings-body {
