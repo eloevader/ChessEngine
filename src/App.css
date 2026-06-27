@@ -775,39 +775,60 @@ body {
   margin-left: 4px;
 }
 
-/* Live attack tracker text panel — shows the "who is attacking whom"
-   description for the most recent move. */
-.attack-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 6px 10px;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
+/* Live threats panel — sits inside the side panel under the
+   move list. Shows "who is attacking whom" descriptions. Hidden
+   when there are no threats, so it doesn't take up space. */
+.threats-panel {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-clr);
   border-radius: 8px;
-  margin: 4px 0 0 0;
+  padding: 8px 10px;
+  margin: 8px 0 0 0;
   font-size: 12px;
   line-height: 1.4;
+  max-height: 30vh;
+  overflow-y: auto;
+  flex-shrink: 0;
 }
-.attack-line {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  align-items: baseline;
-}
-.attack-side {
-  font-weight: 700;
+.threats-header {
   font-size: 11px;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  padding: 1px 6px;
-  border-radius: 4px;
+  color: var(--text-dim);
+  margin-bottom: 6px;
 }
-.attack-side-w { background: rgba(255, 255, 255, 0.85); color: #222; }
-.attack-side-b { background: rgba(40, 40, 40, 0.85); color: #f4f4f4; }
-.attack-piece { font-weight: 600; }
-.attack-square { font-family: ui-monospace, Consolas, monospace; color: var(--text-dim); }
-.attack-verb { color: var(--text-dim); font-style: italic; }
+.threats-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.threat-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+}
+.threat-side {
+  display: inline-block;
+  min-width: 16px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.threat-side-w { background: rgba(255, 255, 255, 0.85); color: #222; }
+.threat-side-b { background: rgba(40, 40, 40, 0.85); color: #f4f4f4; }
+.threat-target { color: var(--text-dim); font-weight: 700; }
+.threat-piece { font-weight: 600; }
+.threat-square {
+  font-family: ui-monospace, Consolas, monospace;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.threat-arrow { color: var(--accent); font-weight: 700; }
 
 .coord-incell {
   position: absolute;

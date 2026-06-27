@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Board } from './components/Board';
 import { MoveHistory } from './components/MoveHistory';
+import { ThreatsPanel } from './components/ThreatsPanel';
 import { PromotionDialog } from './components/PromotionDialog';
 import { SettingsPanel } from './components/SettingsPanel';
 import { CapturedRow } from './components/CapturedPieces';
@@ -31,15 +32,6 @@ import type { MoveTag } from './chess/classifier';
 import './App.css';
 
 // ---------------- Types ----------------
-
-const PIECE_DISPLAY: Record<string, string> = {
-  p: 'Pawn',
-  n: 'Knight',
-  b: 'Bishop',
-  r: 'Rook',
-  q: 'Queen',
-  k: 'King',
-};
 
 type PendingPromotion = {
   from: Square;
@@ -1412,26 +1404,6 @@ function App() {
             />
           )}
           <CapturedRow captures={captures} side={bottomSide} />
-          {showThreatsNow && attackDescriptions.length > 0 && (
-            <div className="attack-panel" role="status" aria-live="polite">
-              {attackDescriptions.map((d, i) => {
-                const pieceName = PIECE_DISPLAY[d.attackerType] ?? d.attackerType.toUpperCase();
-                const targetName = PIECE_DISPLAY[d.targetType] ?? d.targetType.toUpperCase();
-                const side = d.attackerColor === 'w' ? 'White' : 'Black';
-                const opp = d.attackerColor === 'w' ? 'Black' : 'White';
-                return (
-                  <div key={i} className="attack-line">
-                    <span className={`attack-side attack-side-${d.attackerColor}`}>{side}</span>
-                    <span className="attack-piece">{pieceName}</span>
-                    <span className="attack-square">on {d.attackerSquare}</span>
-                    <span className="attack-verb">attacks</span>
-                    <span className="attack-piece attack-piece-target">{opp} {targetName}</span>
-                    <span className="attack-square">on {d.targetSquare}</span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
           {isGameEnded && !isReviewMode && (
             <div className="post-game-actions">
               <button className="primary-action" onClick={onReview}>
@@ -1593,6 +1565,9 @@ function App() {
                 : null
             }
           />
+          {showThreatsNow && attackDescriptions.length > 0 && (
+            <ThreatsPanel descriptions={attackDescriptions} />
+          )}
         </aside>
         )}
       </main>
