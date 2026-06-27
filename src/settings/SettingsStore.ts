@@ -3,7 +3,7 @@ import type { PieceSetId } from '../chess/pieces';
 
 export type AnimationSpeed = 'slow' | 'normal' | 'fast' | 'arcade';
 export type AnimationStyle = 'slide' | 'arc';
-export type SoundPack = 'classic' | 'retro' | 'modern' | 'arcade' | 'soft';
+export type SoundPack = 'classic' | 'retro' | 'modern' | 'arcade' | 'soft' | 'lichess' | 'chesscom';
 export type CoordDisplay = 'off' | 'inside' | 'outside' | 'all';
 export type GameMode = 'local' | 'computer' | 'analysis';
 export type PlayerSide = 'w' | 'b' | 'random';
@@ -61,6 +61,8 @@ export const DEFAULT_SETTINGS: Settings = {
   soundEnabled: true,
   soundVolume: 0.6,
   soundPack: 'classic',
+  // (lichess and chesscom packs are also available; the user picks
+  // via the Settings panel)
   coordDisplay: 'outside',
   showLegalMoves: true,
   highlightLastMove: true,

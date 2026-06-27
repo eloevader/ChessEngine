@@ -18,6 +18,8 @@ const ANIM_SPEEDS: { id: AnimationSpeed; label: string }[] = [
 
 const SOUND_PACKS: { id: SoundPack; label: string; description: string }[] = [
   { id: 'classic', label: 'Classic', description: 'Lichess-style natural sounds' },
+  { id: 'lichess', label: 'Lichess', description: 'Official Lichess standard pack' },
+  { id: 'chesscom', label: 'Chess.com', description: 'Chess.com default pack' },
   { id: 'retro', label: 'Retro 8-bit', description: 'Chiptune beeps, arcade feel' },
   { id: 'modern', label: 'Modern', description: 'Clean sine tones, minimal' },
   { id: 'arcade', label: 'Arcade', description: 'Bouncy, game-like' },

@@ -5,6 +5,7 @@ import { getSettings, type Settings, type SoundPack } from '../settings/Settings
 export type SoundEvent =
   | { type: 'move'; move: LegalMove }
   | { type: 'capture'; move: LegalMove }
+  | { type: 'castle'; move: LegalMove }
   | { type: 'check' }
   | { type: 'checkmate' }
   | { type: 'stalemate' }
@@ -19,6 +20,7 @@ type SoundKey =
   | 'capture'
   | 'check'
   | 'checkmate'
+  | 'castle'
   | 'victory'
   | 'defeat'
   | 'draw'
@@ -81,6 +83,34 @@ const SOUND_MAP: Record<SoundPack, Partial<Record<SoundKey, string>>> = {
     illegal: 'sounds/soft-error.wav',
     lowTime: 'sounds/soft-lowtime.wav',
   },
+  // Lichess standard sound pack (downloaded from the official
+  // lichess-org/lila repo, served from lichess1.org).
+  lichess: {
+    move: 'sounds/lichess/Move.mp3',
+    capture: 'sounds/lichess/Capture.mp3',
+    check: 'sounds/lichess/Check.mp3',
+    checkmate: 'sounds/lichess/Checkmate.mp3',
+    castle: 'sounds/lichess/Castle.mp3',
+    victory: 'sounds/lichess/Victory.mp3',
+    defeat: 'sounds/lichess/Defeat.mp3',
+    draw: 'sounds/lichess/Draw.mp3',
+    lowTime: 'sounds/lichess/LowTime.mp3',
+    illegal: 'sounds/lichess/Select.mp3',
+  },
+  // Chess.com default sound pack (scraped from chess.com, mirrored
+  // in the Orivoir/scraping-sound-effects-chess.com repo).
+  chesscom: {
+    move: 'sounds/chesscom/Move.mp3',
+    capture: 'sounds/chesscom/Capture.mp3',
+    check: 'sounds/chesscom/Check.mp3',
+    checkmate: 'sounds/chesscom/Checkmate.mp3',
+    castle: 'sounds/chesscom/Castle.mp3',
+    victory: 'sounds/chesscom/Victory.mp3',
+    defeat: 'sounds/chesscom/Defeat.mp3',
+    draw: 'sounds/chesscom/Draw.mp3',
+    lowTime: 'sounds/chesscom/LowTime.mp3',
+    illegal: 'sounds/chesscom/Illegal.mp3',
+  },
 };
 
 class SoundManager {
@@ -134,6 +164,9 @@ class SoundManager {
         break;
       case 'capture':
         this.play('capture');
+        break;
+      case 'castle':
+        this.play('castle');
         break;
       case 'check':
         this.play('check');

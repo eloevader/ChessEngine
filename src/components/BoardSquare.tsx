@@ -161,7 +161,7 @@ export function BoardSquare(props: SquareProps) {
           className={`move-annotation ${isLight ? 'on-light' : 'on-dark'}`}
           title={moveTag.label}
         >
-          <TagIcon tag={moveTag.tag} size={20} />
+          <TagIcon tag={moveTag.tag} size={26} />
         </span>
       )}
       {piece && (

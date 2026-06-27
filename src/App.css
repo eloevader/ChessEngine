@@ -925,15 +925,22 @@ body {
 
 /* On-board move annotation (chess.com-style). The icon is shown
  * at the top-right of the destination square of the currently-
- * viewed move, exactly where chess.com puts it. */
+ *  viewed move, exactly where chess.com puts it. */
 .move-annotation {
   position: absolute;
-  top: -2px;
-  right: -2px;
+  top: -4px;
+  right: -4px;
   pointer-events: none;
   z-index: 6;
   line-height: 0;
-  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.7));
+  /* Strong outer ring + inner shadow gives the icon weight on
+   * both light and dark squares. */
+  filter:
+    drop-shadow(0 0 1px rgba(0, 0, 0, 0.95))
+    drop-shadow(0 0 2px rgba(0, 0, 0, 0.85))
+    drop-shadow(0 0 4px rgba(0, 0, 0, 0.6));
+  transform: scale(1.15);
+  transform-origin: top right;
 }
 .coord-incell.on-light {
   color: rgba(0, 0, 0, 0.55);
@@ -1191,6 +1198,11 @@ body {
   margin-left: 4px;
   vertical-align: middle;
   line-height: 0;
+  transform: scale(1.15);
+  transform-origin: left center;
+  filter:
+    drop-shadow(0 0 1px rgba(0, 0, 0, 0.95))
+    drop-shadow(0 0 2px rgba(0, 0, 0, 0.7));
 }
 .move-cell .move-icon svg { display: block; }
 

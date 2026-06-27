@@ -270,6 +270,15 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewPly, fullHistory, moveClassifications.classifications]);
 
+  // Pre-built array of `{ san }` for MoveHistory. Computed here
+  // (outside the side-panel JSX) so the useMemo always runs every
+  // render — conditionally placing hooks inside JSX is a React error
+  // (#300) when the component can mount/unmount based on flags
+  // like `boardFullscreen`.
+  const moveHistorySANS = useMemo(
+    () => fullHistory.map((san) => ({ san } as LegalMove)),
+    [fullHistory],
+  );
   const kingInCheck = useMemo(
     () => (snapshot.inCheck ? findKingSquare(fen, snapshot.turn) : null),
     [fen, snapshot.inCheck, snapshot.turn],
@@ -326,7 +335,16 @@ function App() {
       setAnimatingMove(anim);
       setFen(game.fen());
       setViewPly((v) => v + 1);
-      setFullHistory((h) => [...h, result.san]);
+      setFullHistory((h) => {
+        // If we're in analysis mode (or in any mode where the user
+        // has rewound and is now making a new move), truncate any
+        // moves after the current view position. The new move
+        // becomes the only continuation from here.
+        if (settings.gameMode === 'analysis') {
+          return [...h.slice(0, viewPly), result.san];
+        }
+        return [...h, result.san];
+      });
       if (clockEnabled) {
         // Snapshot the time left on the mover's clock (after the
         // increment) for the move list. Convention: store the time
@@ -348,7 +366,8 @@ function App() {
         });
       }
 
-      if (result.isCapture) emit({ type: 'capture', move: result });
+      if (result.isCastle) emit({ type: 'castle', move: result });
+      else if (result.isCapture) emit({ type: 'capture', move: result });
       else emit({ type: 'move', move: result });
 
       const nextSnap = game.snapshot();
@@ -1508,7 +1527,7 @@ function App() {
           <div className="side-panel-spacer" aria-hidden="true" />
           <MoveHistory
             history={fullHistory}
-            sanMoves={useMemo(() => fullHistory.map((san) => ({ san } as LegalMove)), [fullHistory])}
+            sanMoves={moveHistorySANS}
             currentPly={viewPly}
             onJumpTo={onJumpTo}
             onJumpStart={onJumpStart}

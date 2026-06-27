@@ -153,7 +153,7 @@ export function MoveHistory({
               <span className="move-text">{r.white ?? ''}</span>
               {wTag && (
                 <span className={`move-icon icon-${wTag}`}>
-                  <TagIcon tag={wTag} size={14} />
+                  <TagIcon tag={wTag} size={18} />
                 </span>
               )}
             </button>
@@ -171,7 +171,7 @@ export function MoveHistory({
               <span className="move-text">{r.black ?? ''}</span>
               {bTag && (
                 <span className={`move-icon icon-${bTag}`}>
-                  <TagIcon tag={bTag} size={14} />
+                  <TagIcon tag={bTag} size={18} />
                 </span>
               )}
             </button>
@@ -187,3 +187,4 @@ export function MoveHistory({
     </div>
   );
 }
+
