@@ -5,7 +5,7 @@
 
 declare const __BUILD_DATE__: string;
 
-export const APP_VERSION = '0.9.2-beta';
+export const APP_VERSION = '0.9.3-beta';
 export const APP_NAME = 'Chess Analyzer (beta)';
 export const BUILD_DATE =
   typeof __BUILD_DATE__ !== 'undefined'
