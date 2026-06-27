@@ -11,16 +11,34 @@ declare const Stockfish: () => {
   terminate: () => void;
 };
 
+function log(...args: unknown[]) {
+  console.log('[WasmEngine]', ...args);
+}
+function warn(...args: unknown[]) {
+  console.warn('[WasmEngine]', ...args);
+}
+function error(...args: unknown[]) {
+  console.error('[WasmEngine]', ...args);
+}
+
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
     if (document.querySelector(`script[src="${src}"]`)) {
+      log('Script tag already in DOM, skipping load');
       resolve();
       return;
     }
+    log('Creating script tag for', src);
     const s = document.createElement('script');
     s.src = src;
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error(`Failed to load ${src}`));
+    s.onload = () => {
+      log('Script loaded OK:', src);
+      resolve();
+    };
+    s.onerror = () => {
+      error('Script load FAILED:', src);
+      reject(new Error(`Failed to load ${src}`));
+    };
     document.head.appendChild(s);
   });
 }
@@ -31,6 +49,46 @@ function ensureScriptLoaded(): Promise<void> {
     scriptLoadPromise = loadScript(STOCKFISH_JS);
   }
   return scriptLoadPromise;
+}
+
+function checkWasmThreads(): boolean {
+  log('--- Feature detection ---');
+  const hasWebAssembly = typeof WebAssembly === 'object' && typeof WebAssembly.validate === 'function';
+  log('WebAssembly.validate:', hasWebAssembly);
+  if (!hasWebAssembly) {
+    warn('WebAssembly not available');
+    return false;
+  }
+
+  const hasSharedArrayBuffer = typeof SharedArrayBuffer === 'function';
+  log('SharedArrayBuffer:', hasSharedArrayBuffer);
+  if (!hasSharedArrayBuffer) {
+    warn('SharedArrayBuffer not available — missing COOP/COEP headers?');
+    return false;
+  }
+
+  const hasAtomics = typeof Atomics === 'object';
+  log('Atomics:', hasAtomics);
+  if (!hasAtomics) {
+    warn('Atomics not available');
+    return false;
+  }
+
+  try {
+    const mem = new WebAssembly.Memory({ shared: true, initial: 1, maximum: 2 });
+    const ok = mem.buffer instanceof SharedArrayBuffer;
+    log('Shared WebAssembly.Memory:', ok);
+    if (!ok) {
+      warn('Shared memory allocation failed');
+      return false;
+    }
+  } catch (e) {
+    warn('WebAssembly.Memory({shared: true}) threw:', (e as Error).message);
+    return false;
+  }
+
+  log('All feature checks PASSED');
+  return true;
 }
 
 export class WasmStockfishEngine {
@@ -56,38 +114,65 @@ export class WasmStockfishEngine {
   }
 
   async init(): Promise<void> {
-    if (this.initPromise) return this.initPromise;
+    if (this.initPromise) {
+      log('init() already in progress, returning existing promise');
+      return this.initPromise;
+    }
+    log('init() called');
     this.initPromise = this._init();
     return this.initPromise;
   }
 
   private async _init(): Promise<void> {
     try {
-      if (typeof SharedArrayBuffer !== 'function') {
+      log('--- WASM engine init start ---');
+
+      if (!checkWasmThreads()) {
         throw new Error(
-          'SharedArrayBuffer is not available. The WASM engine requires ' +
+          'WASM threading not supported. The stockfish.wasm engine requires ' +
           'Cross-Origin-Embedder-Policy: require-corp and ' +
-          'Cross-Origin-Opener-Policy: same-origin headers. ' +
-          'Switch to "Local bridge" or add the required headers.'
+          'Cross-Origin-Opener-Policy: same-origin headers on the deployment. ' +
+          'Fall back to "Local bridge" in Settings, or deploy to a platform ' +
+          'that supports these headers (Netlify, Cloudflare Pages, Vercel).'
         );
       }
 
+      log('Loading stockfish.js script...');
       await ensureScriptLoaded();
+      log('Script loading complete');
+
+      let waited = 0;
       while (typeof Stockfish === 'undefined') {
         await new Promise((r) => setTimeout(r, 50));
+        waited += 50;
+        if (waited >= 5000) {
+          throw new Error('Stockfish global not defined after 5s');
+        }
       }
-      this.sf = Stockfish();
+      log('Stockfish global found after', waited, 'ms');
 
-      // Safety timeout: if the wasm module never initializes (e.g. missing
-      // headers, CORS issue), don't hang forever.
+      log('Calling Stockfish()...');
+      this.sf = Stockfish();
+      log('Stockfish() returned, sf.ready is a Promise');
+      log('Waiting for sf.ready (WASM module init)...');
+
       const readyTimeout = new Promise<void>((_, reject) =>
-        setTimeout(() => reject(new Error('Stockfish.wasm initialization timed out after 10s')), 10000)
+        setTimeout(() => reject(new Error('sf.ready timed out after 15s')), 15000)
       );
       await Promise.race([this.sf.ready, readyTimeout]);
+      log('sf.ready RESOLVED — WASM module initialized');
 
-      this.sf.addMessageListener((line: string) => this.processLine(line));
+      log('Setting up addMessageListener...');
+      this.sf.addMessageListener((line: string) => {
+        log('UCI output:', line.trim());
+        this.processLine(line);
+      });
+
+      log('Sending "uci" command');
       this.sf.postMessage('uci');
+      log('--- Engine init complete, waiting for uciok ---');
     } catch (err) {
+      error('_init() failed:', (err as Error).message);
       this.emit({ type: 'error', message: (err as Error).message });
       throw err;
     }
@@ -98,6 +183,7 @@ export class WasmStockfishEngine {
     if (!trimmed) return;
 
     if (trimmed === 'uciok') {
+      log('Received uciok — sending options + isready');
       if (!this.sf) return;
       this.sf.postMessage('setoption name Threads value 2');
       this.sf.postMessage('setoption name Hash value 64');
@@ -109,6 +195,7 @@ export class WasmStockfishEngine {
     }
 
     if (trimmed === 'readyok') {
+      log('Received readyok — engine is READY');
       if (!this.ready) {
         this.ready = true;
         this.emit({ type: 'ready' });
@@ -120,6 +207,7 @@ export class WasmStockfishEngine {
       const parts = trimmed.split(/\s+/);
       const move = parts[1] ?? '';
       const ponder = parts[3];
+      log('Received bestmove:', move, ponder ? '(ponder: ' + ponder + ')' : '');
       this.emit({ type: 'bestmove', move, ponder });
       return;
     }
@@ -134,6 +222,7 @@ export class WasmStockfishEngine {
   setLevel(level: EngineOptions['level']) {
     this.level = level;
     if (this.ready && this.sf) {
+      log('Setting skill level to', level);
       this.sf.postMessage('setoption name Skill Level value ' + LEVEL_CONFIG[level].skill);
     }
   }
@@ -153,10 +242,12 @@ export class WasmStockfishEngine {
     if (options.multiPv && options.multiPv > 1) parts.push('multipv ' + options.multiPv);
     parts.push('movetime ' + movetime);
     if (!options.movetimeOverride && cfg.depth) parts.push('depth ' + cfg.depth);
+    log('Sending go:', parts.join(' '));
     this.sf?.postMessage(parts.join(' '));
   }
 
   async stop(): Promise<void> {
+    log('Sending stop');
     this.sf?.postMessage('stop');
   }
 
@@ -211,6 +302,7 @@ export class WasmStockfishEngine {
   }
 
   destroy(): void {
+    log('Destroying engine');
     this.sf?.terminate();
     this.sf = null;
     this.ready = false;
